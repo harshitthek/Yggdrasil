@@ -392,12 +392,13 @@ graph LR
     subgraph Resolve["Source Resolution"]
         Spotify["Spotify Extractor"]
         Apple["Apple Music Extractor"]
-        YT["YouTubei Extractor"]
+        YT["YouTube Extractor"]
         SC["SoundCloud Extractor"]
     end
 
-    subgraph Bridge["Audio Bridge"]
-        YTDLP["yt-dlp Stream Interceptor"]
+    subgraph Bridge["YouTube Boundary"]
+        Local["WorldTree YouTube Extractor\n(feature-flagged)"]
+        Resolver["Innertube / peer / yt-dlp fallback"]
     end
 
     subgraph Playback["Voice Playback"]
@@ -407,17 +408,18 @@ graph LR
 
     Query --> Resolve
     Link --> Resolve
-    Spotify -->|metadata| Bridge
-    Apple -->|metadata| Bridge
-    YT --> Bridge
+    Spotify -->|metadata| Local
+    Apple -->|metadata| Local
+    YT --> Local
     SC -->|native stream| Playback
-    Bridge --> YTDLP --> Opus --> Voice
+    Local --> Resolver --> Opus --> Voice
 ```
 
 - **Spotify & Apple Music** resolve track metadata, then bridge through YouTube for the actual audio stream
-- **YouTube** uses the `discord-player-youtubei` extractor (YouTube Music internal API) for stable playback
+- **YouTube** uses `discord-player-youtubei` by default. Setting `USE_LOCAL_YOUTUBE_EXTRACTOR=true` enables the staged WorldTree-owned extractor instead.
 - **SoundCloud** streams natively without bridging
-- **yt-dlp** intercepts and provides the raw audio stream when the default extractors fail
+- **yt-dlp** is an optional final fallback only inside the local YouTube boundary; it is not a global stream interceptor
+- **Rollback** is configuration-only: set `USE_LOCAL_YOUTUBE_EXTRACTOR=false` and restart
 
 ### Player Controls
 

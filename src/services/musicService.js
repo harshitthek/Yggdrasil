@@ -4,6 +4,8 @@ import { YoutubeExtractor } from 'discord-player-youtubei';
 import { buildNowPlayingEmbed, buildSuccessEmbed, buildErrorEmbed, buildNeutralEmbed } from '../utils/embeds.js';
 import { buildMusicPlayerComponents } from '../utils/components.js';
 import { logger } from '../utils/logger.js';
+import { WorldTreeYoutubeExtractor } from './music/youtube/WorldTreeYoutubeExtractor.js';
+import { runYoutubeDiagnostic } from './music/youtube/YoutubeDiagnostic.js';
 
 // ─── MUSIC_DEBUG helpers ────────────────────────────────────────────────────
 
@@ -27,37 +29,59 @@ function dbgErr(queue, msg, error) {
   });
 }
 
-// ─── Standalone youtubei.js diagnostic (runs on playerError) ────────────────
+const LOCAL_YOUTUBE_EXTRACTOR_ID = WorldTreeYoutubeExtractor.identifier;
 
-async function runYoutubeiDiagnostic(track, queue) {
-  try {
-    const { Innertube } = await import('youtubei.js');
-    dbg(queue, `[DIAG] Running independent youtubei.js diagnostic for track: ${track.title}...`);
+/**
+ * Select the one active YouTube ownership boundary for this process.
+ *
+ * @param {boolean} useLocalYoutubeExtractor Whether the staged local path is enabled.
+ * @returns {{extractor: typeof WorldTreeYoutubeExtractor | typeof YoutubeExtractor, options: object, label: string}}
+ * Extractor registration details.
+ */
+export function getYoutubeExtractorRegistration(useLocalYoutubeExtractor = false) {
+  if (useLocalYoutubeExtractor) {
+    return {
+      extractor: WorldTreeYoutubeExtractor,
+      options: {},
+      label: LOCAL_YOUTUBE_EXTRACTOR_ID
+    };
+  }
 
-    const yt = await Innertube.create({
-      generate_session_locally: true,
-      client_type: 'IOS',
-      generateWithPoToken: true
-    });
-    dbg(queue, `[DIAG] Innertube initialized. Client: IOS. PoToken attached: ${!!yt.session.po_token}`);
+  return {
+    extractor: YoutubeExtractor,
+    options: {
+      streamOptions: {
+        useClient: 'IOS',
+        generateWithPoToken: true
+      }
+    },
+    label: 'YoutubeExtractor'
+  };
+}
 
-    const search = await yt.search(track.title + ' ' + track.author, { type: 'video' });
-    const videoId = search.results?.[0]?.id;
-    if (!videoId) {
-      dbg(queue, '[DIAG] Standalone search found no results.');
-      return;
+/**
+ * Prevent a local YouTube track from falling through discord-player's generic
+ * cross-provider fallback path. Non-local tracks keep the existing behavior.
+ *
+ * @param {boolean} useLocalYoutubeExtractor Whether the local path is enabled.
+ * @returns {(track: import('discord-player').Track, queryType: string, queue: import('discord-player').GuildQueue) => Promise<import('discord-player').ExtractorStreamable | null>}
+ * Queue hook used by discord-player before generic stream extraction.
+ */
+export function createLocalYoutubeStreamGuard(useLocalYoutubeExtractor = false) {
+  return async (track, _queryType, queue) => {
+    if (!useLocalYoutubeExtractor || track?.extractor?.identifier !== LOCAL_YOUTUBE_EXTRACTOR_ID) {
+      return null;
     }
 
-    dbg(queue, `[DIAG] Standalone search successful. Video ID: ${videoId}`);
-    const info = await yt.getBasicInfo(videoId);
-    const format = info.chooseFormat({ type: 'audio', quality: 'best' });
+    const extractor = queue?.player?.extractors?.get(LOCAL_YOUTUBE_EXTRACTOR_ID);
+    if (!extractor) {
+      const error = new Error('The local YouTube extractor is not registered.');
+      error.code = 'YT_DEPENDENCY_MISSING';
+      throw error;
+    }
 
-    dbg(queue, '[DIAG] Format selected. Attempting decipher...');
-    const decipheredUrl = await format.decipher(yt.session.player);
-    dbg(queue, `[DIAG] Decipher successful. URL length: ${decipheredUrl?.length}`);
-  } catch (err) {
-    dbgErr(queue, '[DIAG] youtubei.js standalone diagnostic FAILED:', err);
-  }
+    return extractor.stream(track);
+  };
 }
 
 // ─── Safe channel sender ────────────────────────────────────────────────────
@@ -217,6 +241,7 @@ function instrumentAudioResource(queue, resource) {
 // ─── Player initialization ──────────────────────────────────────────────────
 
 export async function initializePlayer(client, playerService) {
+  const useLocalYoutubeExtractor = client?.appContext?.config?.useLocalYoutubeExtractor === true;
   const player = playerService.setPlayer(
     new Player(client, {
       skipFFmpeg: false
@@ -230,21 +255,15 @@ export async function initializePlayer(client, playerService) {
     logger.error('Failed to load DefaultExtractors. Some sources may be unavailable.', err);
   }
 
-  // 2. Register the YouTubei extractor — this is the critical streaming bridge
-  //    Spotify/Apple tracks resolve metadata then bridge through YouTube for audio
-  //    IOS client is the only one that reliably produces direct stream URLs
-  //    (ANDROID returns HTTP 400, ANDROID_MUSIC is invalid, TV_EMBEDDED is blocked)
+  // 2. Register exactly one YouTube boundary. The upstream extractor remains
+  //    the default until the local path is explicitly enabled.
   try {
-    await player.extractors.register(YoutubeExtractor, {
-      streamOptions: {
-        useClient: 'IOS',
-        generateWithPoToken: true
-      }
-    });
+    const registration = getYoutubeExtractorRegistration(useLocalYoutubeExtractor);
+    await player.extractors.register(registration.extractor, registration.options);
 
-    logger.info('Music extractors loaded: DefaultExtractors + YoutubeExtractor');
+    logger.info(`Music extractors loaded: DefaultExtractors + ${registration.label}`);
   } catch (err) {
-    logger.error('Failed to register YoutubeExtractor. Music playback will be unavailable.', err);
+    logger.error('Failed to register the active YouTube extractor. Music playback will be unavailable.', err);
   }
 
   // ─── Player Events ──────────────────────────────────────────────────────
@@ -260,6 +279,7 @@ export async function initializePlayer(client, playerService) {
   // ── Connection created: attach deep instrumentation ONCE ──
   player.events.on('connection', (queue) => {
     dbg(queue, 'connection event: dispatcher created');
+    queue.onBeforeCreateStream = createLocalYoutubeStreamGuard(useLocalYoutubeExtractor);
     instrumentDispatcher(queue);
   });
 
@@ -334,7 +354,11 @@ export async function initializePlayer(client, playerService) {
     });
 
     if (isDebug() && track) {
-      runYoutubeiDiagnostic(track, queue);
+      const localYoutubeExtractor = player.extractors.get(LOCAL_YOUTUBE_EXTRACTOR_ID);
+      void runYoutubeDiagnostic(track, localYoutubeExtractor, {
+        debug: (message) => dbg(queue, `[DIAG] ${message}`),
+        debugError: (message, error) => dbgErr(queue, `[DIAG] ${message}`, error)
+      });
     }
   });
 

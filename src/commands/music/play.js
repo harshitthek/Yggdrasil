@@ -26,6 +26,39 @@ function isUrl(query) {
   return /^https?:\/\//i.test(query);
 }
 
+function isYoutubeUrl(query) {
+  if (!isUrl(query)) return false;
+
+  try {
+    const url = new URL(query);
+    const host = url.hostname.toLowerCase();
+
+    if (host === 'youtu.be') {
+      return url.pathname.split('/').filter(Boolean).length === 1;
+    }
+
+    if (!['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com'].includes(host)) {
+      return false;
+    }
+
+    if (url.pathname === '/playlist') return Boolean(url.searchParams.get('list'));
+    if (url.pathname === '/watch') return Boolean(url.searchParams.get('v') || url.searchParams.get('list'));
+
+    const path = url.pathname.split('/').filter(Boolean);
+    return ['shorts', 'live', 'embed'].includes(path[0]) && path.length === 2;
+  } catch {
+    return false;
+  }
+}
+
+export function resolveMusicSearchEngine(query, { useLocalYoutubeExtractor = false } = {}) {
+  if (useLocalYoutubeExtractor && isYoutubeUrl(query)) {
+    return 'ext:WorldTreeYoutube';
+  }
+
+  return isUrl(query) ? QueryType.AUTO : QueryType.AUTO_SEARCH;
+}
+
 export function formatMusicErrorMessage(error, maxLength = 150) {
   const message = error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error';
 
@@ -41,14 +74,14 @@ export function formatMusicErrorMessage(error, maxLength = 150) {
  *
  * No manual cascade needed — discord-player handles extractor iteration internally.
  */
-export async function executePlay(query, voiceChannel, user, textChannel, playerService, respond) {
+export async function executePlay(query, voiceChannel, user, textChannel, playerService, respond, options = {}) {
   if (!voiceChannel) {
     return respond({
       embeds: [buildErrorEmbed('Voice Channel Required', 'You need to be in a voice channel to play music.')]
     });
   }
 
-  const searchEngine = isUrl(query) ? QueryType.AUTO : QueryType.AUTO_SEARCH;
+  const searchEngine = resolveMusicSearchEngine(query, options);
   const musicPlayer = playerService?.getPlayer();
 
   if (!musicPlayer) {
@@ -190,9 +223,17 @@ export async function execute(interaction) {
   const appContext = getAppContext(interaction) ?? {};
   const playerService = appContext.playerService ?? null;
 
-  await executePlay(query, voiceChannel, interaction.user, textChannel, playerService, async (payload) => {
-    await interaction.editReply(payload);
-  });
+  await executePlay(
+    query,
+    voiceChannel,
+    interaction.user,
+    textChannel,
+    playerService,
+    async (payload) => {
+      await interaction.editReply(payload);
+    },
+    { useLocalYoutubeExtractor: appContext.config?.useLocalYoutubeExtractor === true }
+  );
 }
 
 // ─── Prefix Command Handler ────────────────────────────────────────────────
@@ -215,7 +256,15 @@ export async function executeMessage(context) {
   const textChannel = context.message.channel;
   const playerService = context.appContext?.playerService ?? null;
 
-  await executePlay(query, voiceChannel, context.user, textChannel, playerService, async (payload) => {
-    await context.respond(payload);
-  });
+  await executePlay(
+    query,
+    voiceChannel,
+    context.user,
+    textChannel,
+    playerService,
+    async (payload) => {
+      await context.respond(payload);
+    },
+    { useLocalYoutubeExtractor: context.appContext?.config?.useLocalYoutubeExtractor === true }
+  );
 }

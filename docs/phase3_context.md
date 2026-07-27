@@ -3,6 +3,8 @@
 > **Purpose**: Pre-read context snapshot for Phase 3 implementation. Eliminates re-reading files during coding.
 > **Created**: 2026-07-08
 > **Scope**: Every file touched or consumed by Phase 3: Data & Resource Hardening
+>
+> **Historical note**: The music subsection predates the local YouTube extractor migration. For current music ownership, dependency, and rollout rules, use `docs/_final/developer_contract.md` and `docs/_final/implementation_plan.md`.
 
 ---
 
@@ -273,13 +275,7 @@ No Phase 3 changes needed. Mongoose disconnect is already handled.
 
 ## 5. Music Service
 
-**File**: [musicService.js](file:///c:/Users/user/Desktop/harshit/projects/WorldTree-Auth/src/services/musicService.js) (171 lines)
-
-**yt-dlp assessment**: The bot does **NOT** spawn yt-dlp directly. `discord-player` + `discord-player-youtubei` handle all streaming internally via the YouTube Innertube API. The `youtube-dl-exec` package in `package.json` is a **dead dependency** — never imported in `src/`.
-
-**Conclusion**: yt-dlp process pooling from the roadmap is **not applicable**. Skip it.
-
-**Bonus cleanup opportunity**: Remove `youtube-dl-exec` from `package.json` (dead dependency).
+**Historical scope update**: The original assessment no longer reflects the repository. The staged local YouTube extractor imports `youtube-dl-exec` only for its final fallback stream strategy and owns cleanup of any spawned process. The dependency must remain installed until the explicit package-cleanup phase; it is not a `musicService.js` responsibility.
 
 ---
 
@@ -342,7 +338,7 @@ Who imports what — critical for impact analysis:
 | 4 | No DB connection retry | `connection.js` | 🔴 | ✅ 3-attempt retry |
 | 5 | No DB reconnection logging | `connection.js` | 🟡 | ✅ Event listeners |
 | 6 | No migration system | — | 🟡 | ✅ New system |
-| 7 | Dead dependency `youtube-dl-exec` | `package.json` | 🟢 | ✅ Remove |
+| 7 | Historical dead-dependency finding for `youtube-dl-exec` | `package.json` | Superseded | Retained during the local YouTube rollout |
 | 8 | `listWarnings` has no limit | `moderationRepository.js` | 🟡 | ❌ Out of scope |
 | 9 | `getCaseStats` fallback loads all | `moderationRepository.js` | 🟡 | ❌ Out of scope |
 | 10 | Triple `automodEnabled` redundancy | `GuildSettings` + repo | 🟡 | ❌ Out of scope |

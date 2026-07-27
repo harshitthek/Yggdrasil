@@ -24,6 +24,7 @@ test('readRuntimeEnv returns trimmed runtime configuration values', () => {
     sessionSecret: null,
     trustedAdminRoleIds: [],
     enableApi: false,
+    useLocalYoutubeExtractor: false,
     apiPort: 3000,
     rateLimit: {
       globalMax: 120,
@@ -195,6 +196,17 @@ test('readRuntimeEnv reads API rate limit configuration', () => {
     authMax: 30,
     timeWindow: '2 minutes'
   });
+});
+
+test('readRuntimeEnv enables the local YouTube extractor only for the literal true flag', () => {
+  const baseEnv = {
+    DISCORD_TOKEN: 'token',
+    MONGO_URI: 'mongodb://localhost/world-tree'
+  };
+
+  assert.equal(readRuntimeEnv({ ...baseEnv, USE_LOCAL_YOUTUBE_EXTRACTOR: 'true' }).useLocalYoutubeExtractor, true);
+  assert.equal(readRuntimeEnv({ ...baseEnv, USE_LOCAL_YOUTUBE_EXTRACTOR: 'TRUE' }).useLocalYoutubeExtractor, false);
+  assert.equal(readRuntimeEnv(baseEnv).useLocalYoutubeExtractor, false);
 });
 
 test('readRuntimeEnv rejects invalid rate limit values', () => {

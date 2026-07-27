@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# ESLint is enforced by the repository's CI workflow with the checked-in
+# eslint.config.js. Disable CodeRabbit's sandboxed duplicate run because its
+# dependency installation is timing out for this repository.
+reviews:
+  pre_merge_checks:
+    docstrings:
+      mode: off
+  tools:
+    eslint:
+      enabled: false

@@ -2,7 +2,7 @@ name: Continuous Integration
 
 on:
   pull_request:
-    branches: ["master", "main"]
+    branches: ['master', 'main']
 
 jobs:
   build:
@@ -20,10 +20,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: "npm"
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
+        env:
+          # Tests do not execute the optional yt-dlp binary. Avoid its
+          # unauthenticated GitHub release download during dependency install.
+          YOUTUBE_DL_SKIP_DOWNLOAD: 'true'
 
       - name: Check Formatting
         run: npm run format:check
@@ -43,6 +47,6 @@ jobs:
       - name: Run ShellCheck
         uses: ludeeus/action-shellcheck@2.0.0
         with:
-          scandir: "./ops"
+          scandir: './ops'
           severity: warning
-          check_together: "yes"
+          check_together: 'yes'
