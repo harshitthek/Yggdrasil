@@ -46,13 +46,21 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
     sudo chmod a+rx /usr/local/bin/yt-dlp 2>/dev/null || true
   fi
 
-  # Check Cloudflare WARP IPv6 WireGuard interface
+  # Check Cloudflare WARP IPv6 WireGuard interface & Ensure PersistentKeepalive
   if [[ -f "/etc/wireguard/warp.conf" ]]; then
+    if ! grep -q "PersistentKeepalive" /etc/wireguard/warp.conf; then
+      echo -e "  ${YELLOW}Configuring PersistentKeepalive = 25 in /etc/wireguard/warp.conf...${RESET}"
+      echo "PersistentKeepalive = 25" | sudo tee -a /etc/wireguard/warp.conf > /dev/null
+      sudo systemctl restart wg-quick@warp 2>/dev/null || true
+    fi
     if ! ip link show warp &>/dev/null; then
       echo -e "  ${YELLOW}Activating WireGuard Cloudflare WARP IPv6 tunnel...${RESET}"
       sudo systemctl enable --now wg-quick@warp 2>/dev/null || true
     fi
   fi
+
+  # Optimize Linux TCP Keepalive for continuous 24/7 Discord WebSocket & WebRTC connections
+  sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=10 net.ipv4.tcp_keepalive_probes=6 2>/dev/null || true
 fi
 
 # 2. Run the Cross-Platform Master Setup Script

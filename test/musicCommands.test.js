@@ -232,3 +232,11 @@ test('reconnect247Guilds reconnects to voice channels from database settings', a
   await reconnect247Guilds(mockClient, mockAppContext);
   assert.equal(connectedChannel?.id, 'voice-123');
 });
+
+test('start247Watchdog and stop247Watchdog manage timer cleanly', async () => {
+  const { start247Watchdog, stop247Watchdog } = await import('../src/services/musicService.js');
+
+  const timer = start247Watchdog({ isReady: () => false }, {}, 1000);
+  assert.ok(timer);
+  stop247Watchdog();
+});

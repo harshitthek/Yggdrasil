@@ -1,7 +1,7 @@
 import { ActivityType, Events } from 'discord.js';
 
 import { getAppContext } from '../context/appContext.js';
-import { reconnect247Guilds } from '../services/musicService.js';
+import { reconnect247Guilds, start247Watchdog } from '../services/musicService.js';
 import { BOT } from '../utils/constants.js';
 import { logger } from '../utils/logger.js';
 
@@ -15,5 +15,6 @@ export async function execute(client) {
   const appContext = getAppContext(client);
   if (appContext) {
     await reconnect247Guilds(client, appContext);
+    start247Watchdog(client, appContext);
   }
 }

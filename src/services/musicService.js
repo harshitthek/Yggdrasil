@@ -445,13 +445,15 @@ export async function initializePlayer(client, playerService) {
 }
 
 /**
- * Reconnects 24/7 enabled voice channels across all guilds on bot startup.
+ * Reconnects 24/7 enabled voice channels across all guilds on bot startup or watchdog tick.
  *
  * @param {import('discord.js').Client} client
  * @param {object} appContext
+ * @param {object} [options]
+ * @param {boolean} [options.quiet=false]
  * @returns {Promise<void>}
  */
-export async function reconnect247Guilds(client, appContext) {
+export async function reconnect247Guilds(client, appContext, { quiet = false } = {}) {
   const settingsService = appContext?.settingsService;
   const player = appContext?.playerService?.getPlayer();
   if (!settingsService || !player || !client) return;
@@ -480,6 +482,14 @@ export async function reconnect247Guilds(client, appContext) {
         if (!voiceChannel || (typeof voiceChannel.isVoiceBased === 'function' && !voiceChannel.isVoiceBased()))
           continue;
 
+        const currentBotVoiceId = guild.members?.me?.voice?.channelId;
+        let queue = player.nodes.get(guildId);
+
+        // If already connected properly in the target voice channel with an active queue, do nothing
+        if (currentBotVoiceId === voiceChannelId && queue?.connection) {
+          continue;
+        }
+
         const textChannel = textChannelId
           ? (guild.channels?.cache?.get(textChannelId) ??
             (typeof guild.channels?.fetch === 'function'
@@ -487,7 +497,6 @@ export async function reconnect247Guilds(client, appContext) {
               : null))
           : null;
 
-        let queue = player.nodes.get(guildId);
         if (!queue) {
           queue = player.nodes.create(guild, {
             ...QUEUE_DEFAULTS,
@@ -498,11 +507,19 @@ export async function reconnect247Guilds(client, appContext) {
             leaveOnEmpty: false,
             leaveOnEnd: false
           });
+        } else {
+          queue.metadata = { ...(queue.metadata ?? {}), is247: true };
+          queue.options.leaveOnEmpty = false;
+          queue.options.leaveOnEnd = false;
         }
 
-        if (!queue.connection) {
+        if (!queue.connection || currentBotVoiceId !== voiceChannelId) {
           await queue.connect(voiceChannel, VOICE_CONNECTION_OPTIONS);
-          logger.info(`[24/7] Restored voice connection to "${voiceChannel.name}" in guild "${guild.name}".`);
+          if (!quiet) {
+            logger.info(`[24/7] Restored voice connection to "${voiceChannel.name}" in guild "${guild.name}".`);
+          } else {
+            logger.info(`[24/7 Watchdog] Reconnected to "${voiceChannel.name}" in guild "${guild.name}".`);
+          }
         }
       } catch (err) {
         logger.warn(`[24/7] Failed to reconnect to guild ${record.guildId}:`, err);
@@ -510,5 +527,45 @@ export async function reconnect247Guilds(client, appContext) {
     }
   } catch (error) {
     logger.error('[24/7] Error restoring 24/7 voice channels:', error);
+  }
+}
+
+let watchdogInterval = null;
+
+/**
+ * Starts a background periodic watchdog timer that guarantees 24/7 presence.
+ * If Discord gateway or voice reconnect drops the connection over days, the
+ * watchdog auto-heals and reconnects.
+ *
+ * @param {import('discord.js').Client} client
+ * @param {object} appContext
+ * @param {number} [intervalMs=45000]
+ * @returns {NodeJS.Timeout}
+ */
+export function start247Watchdog(client, appContext, intervalMs = 45000) {
+  if (watchdogInterval) {
+    clearInterval(watchdogInterval);
+  }
+
+  watchdogInterval = setInterval(async () => {
+    try {
+      if (!client || (typeof client.isReady === 'function' && !client.isReady())) return;
+      await reconnect247Guilds(client, appContext, { quiet: true });
+    } catch (err) {
+      logger.error('[24/7 Watchdog] Error in watchdog tick:', err);
+    }
+  }, intervalMs);
+
+  if (watchdogInterval.unref) {
+    watchdogInterval.unref();
+  }
+
+  return watchdogInterval;
+}
+
+export function stop247Watchdog() {
+  if (watchdogInterval) {
+    clearInterval(watchdogInterval);
+    watchdogInterval = null;
   }
 }
