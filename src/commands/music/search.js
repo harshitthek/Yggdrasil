@@ -39,9 +39,13 @@ async function executeSearch(query, voiceChannel, user, textChannel, playerServi
 
   let result;
   try {
+    const appContext = getAppContext();
+    const useLocalYoutubeExtractor = appContext?.config?.useLocalYoutubeExtractor === true;
+    const searchEngine = useLocalYoutubeExtractor ? 'ext:WorldTreeYoutube' : QueryType.AUTO_SEARCH;
+
     result = await musicPlayer.search(query, {
       requestedBy: user,
-      searchEngine: QueryType.AUTO_SEARCH
+      searchEngine
     });
   } catch (err) {
     logger.error('Search failed.', err);

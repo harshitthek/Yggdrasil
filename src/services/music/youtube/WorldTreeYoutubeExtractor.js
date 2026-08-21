@@ -403,12 +403,21 @@ export class WorldTreeYoutubeExtractor extends BaseExtractor {
     }
 
     try {
-      const process = youtubeDl.exec(track.url, {
+      const ytdlpOptions = {
         format: track.live ? 'best[height<=360]' : 'bestaudio',
         output: '-',
         noWarnings: true,
-        noProgress: true
-      });
+        noProgress: true,
+        preferIpv6: true,
+        bufferSize: '16K',
+        retries: 3
+      };
+
+      if (process.env.YOUTUBE_COOKIES_PATH) {
+        ytdlpOptions.cookies = process.env.YOUTUBE_COOKIES_PATH;
+      }
+
+      const process = youtubeDl.exec(track.url, ytdlpOptions);
       const stream = process.stdout;
       if (!stream) {
         throw createExtractorError(YT_NO_STREAM, 'yt-dlp did not return a playable stream.');
@@ -416,6 +425,24 @@ export class WorldTreeYoutubeExtractor extends BaseExtractor {
 
       this.processes ??= new Set();
       this.processes.add(process);
+
+      const terminateProcess = () => {
+        try {
+          if (!process.killed && process.pid) {
+            process.kill('SIGTERM');
+            setTimeout(() => {
+              try {
+                if (!process.killed) process.kill('SIGKILL');
+              } catch (_) {}
+            }, 3000).unref?.();
+          }
+        } catch (_) {}
+      };
+
+      stream.once('close', terminateProcess);
+      stream.once('end', terminateProcess);
+      stream.once('error', terminateProcess);
+
       process.catch((error) => stream.destroy(error)).finally(() => this.processes.delete(process));
       this.#trackStream(stream);
       return stream;
