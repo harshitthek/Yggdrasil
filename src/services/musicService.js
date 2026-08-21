@@ -477,13 +477,14 @@ export async function reconnect247Guilds(client, appContext) {
           (typeof guild.channels?.fetch === 'function'
             ? await guild.channels.fetch(voiceChannelId).catch(() => null)
             : null);
-        if (!voiceChannel || (typeof voiceChannel.isVoiceBased === 'function' && !voiceChannel.isVoiceBased())) continue;
+        if (!voiceChannel || (typeof voiceChannel.isVoiceBased === 'function' && !voiceChannel.isVoiceBased()))
+          continue;
 
         const textChannel = textChannelId
-          ? guild.channels?.cache?.get(textChannelId) ??
+          ? (guild.channels?.cache?.get(textChannelId) ??
             (typeof guild.channels?.fetch === 'function'
               ? await guild.channels.fetch(textChannelId).catch(() => null)
-              : null)
+              : null))
           : null;
 
         let queue = player.nodes.get(guildId);
