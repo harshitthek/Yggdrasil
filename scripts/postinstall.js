@@ -29,12 +29,12 @@ function setupYtDlp() {
 
 function setupFFmpeg() {
   if (platform() === 'linux') {
-    const targetFmpeg = join(nodeModulesDir, 'ffmpeg-static', 'ffmpeg');
-    const systemFFmpeg = ['/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg'].find(p => existsSync(p));
+    const targetFFmpeg = join(nodeModulesDir, 'ffmpeg-static', 'ffmpeg');
+    const systemFFmpeg = ['/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg'].find((p) => existsSync(p));
 
     if (systemFFmpeg) {
       try {
-        if (existsSync(targetFFmpeg)) unlinkSync(targetFmpeg);
+        if (existsSync(targetFFmpeg)) unlinkSync(targetFFmpeg);
         symlinkSync(systemFFmpeg, targetFFmpeg);
       } catch (_) {}
     }
