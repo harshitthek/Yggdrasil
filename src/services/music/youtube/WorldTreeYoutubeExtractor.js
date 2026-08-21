@@ -408,7 +408,6 @@ export class WorldTreeYoutubeExtractor extends BaseExtractor {
         output: '-',
         noWarnings: true,
         noProgress: true,
-        preferIpv6: true,
         bufferSize: '16K',
         retries: 3
       };
