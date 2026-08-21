@@ -56,12 +56,12 @@ test('local YouTube cutover routes supported YouTube URL variants when enabled',
   }
 });
 
-test('local YouTube cutover preserves routing for non-YouTube URLs and text queries', () => {
+test('local YouTube cutover routes text queries to local YouTube when enabled', () => {
   assert.equal(
     resolveMusicSearchEngine('https://open.spotify.com/track/example', { useLocalYoutubeExtractor: true }),
     'auto'
   );
-  assert.equal(resolveMusicSearchEngine('a song title', { useLocalYoutubeExtractor: true }), 'autoSearch');
+  assert.equal(resolveMusicSearchEngine('a song title', { useLocalYoutubeExtractor: true }), 'ext:WorldTreeYoutube');
 });
 
 test('local YouTube cutover rejects unsupported URL shapes', () => {

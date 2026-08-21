@@ -52,7 +52,7 @@ function isYoutubeUrl(query) {
 }
 
 export function resolveMusicSearchEngine(query, { useLocalYoutubeExtractor = false } = {}) {
-  if (useLocalYoutubeExtractor && isYoutubeUrl(query)) {
+  if (useLocalYoutubeExtractor && (isYoutubeUrl(query) || !isUrl(query))) {
     return 'ext:WorldTreeYoutube';
   }
 
