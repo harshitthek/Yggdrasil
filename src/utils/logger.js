@@ -89,15 +89,17 @@ function buildPinoOptions({ scope, level, bindings, isProduction, stream }) {
   };
 
   if (!isProduction && !stream) {
-    options.transport = {
-      target: 'pino-pretty',
-      options: {
-        colorize: true,
-        translateTime: 'SYS:standard',
-        ignore: 'pid,hostname',
-        singleLine: false
-      }
-    };
+    try {
+      options.transport = {
+        target: 'pino-pretty',
+        options: {
+          colorize: true,
+          translateTime: 'SYS:standard',
+          ignore: 'pid,hostname',
+          singleLine: false
+        }
+      };
+    } catch {}
   }
 
   return options;
