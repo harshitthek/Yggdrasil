@@ -417,22 +417,22 @@ export class WorldTreeYoutubeExtractor extends BaseExtractor {
         ytdlpOptions.cookies = process.env.YOUTUBE_COOKIES_PATH;
       }
 
-      const process = youtubeDl.exec(track.url, ytdlpOptions);
-      const stream = process.stdout;
+      const proc = youtubeDl.exec(track.url, ytdlpOptions);
+      const stream = proc.stdout;
       if (!stream) {
         throw createExtractorError(YT_NO_STREAM, 'yt-dlp did not return a playable stream.');
       }
 
       this.processes ??= new Set();
-      this.processes.add(process);
+      this.processes.add(proc);
 
       const terminateProcess = () => {
         try {
-          if (!process.killed && process.pid) {
-            process.kill('SIGTERM');
+          if (!proc.killed && proc.pid) {
+            proc.kill('SIGTERM');
             setTimeout(() => {
               try {
-                if (!process.killed) process.kill('SIGKILL');
+                if (!proc.killed) proc.kill('SIGKILL');
               } catch {}
             }, 3000).unref?.();
           }
@@ -443,7 +443,7 @@ export class WorldTreeYoutubeExtractor extends BaseExtractor {
       stream.once('end', terminateProcess);
       stream.once('error', terminateProcess);
 
-      process.catch((error) => stream.destroy(error)).finally(() => this.processes.delete(process));
+      proc.catch((error) => stream.destroy(error)).finally(() => this.processes.delete(proc));
       this.#trackStream(stream);
       return stream;
     } catch (error) {
