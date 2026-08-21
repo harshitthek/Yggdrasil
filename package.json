@@ -8,6 +8,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
+    "setup": "node scripts/setup.js",
+    "setup:linux": "bash setup.sh",
     "register:commands": "node scripts/registerCommands.js",
     "postinstall": "node scripts/postinstall.js",
     "test": "node --test",
