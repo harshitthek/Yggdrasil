@@ -99,6 +99,11 @@ const guildSettingsSchema = new mongoose.Schema(
       type: String,
       default: 'tree'
     },
+    twentyFourSeven: {
+      enabled: { type: Boolean, default: false },
+      voiceChannelId: { type: String, default: null },
+      textChannelId: { type: String, default: null }
+    },
     activityRoles: {
       spotify: { type: activityRoleConfigSchema, default: () => ({ enabled: false, roleId: null }) },
       streaming: { type: activityRoleConfigSchema, default: () => ({ enabled: false, roleId: null }) },

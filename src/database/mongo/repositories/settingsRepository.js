@@ -89,6 +89,28 @@ export function createSettingsRepository(model = GuildSettings) {
         .lean();
     },
 
+    // ─── 24/7 Voice ────────────────────────────────────────────────────────────
+
+    async set247(guildId, { enabled, voiceChannelId, textChannelId }) {
+      return model
+        .findOneAndUpdate(
+          { guildId },
+          {
+            $set: {
+              'twentyFourSeven.enabled': Boolean(enabled),
+              'twentyFourSeven.voiceChannelId': voiceChannelId ?? null,
+              'twentyFourSeven.textChannelId': textChannelId ?? null
+            }
+          },
+          upsertOptions()
+        )
+        .lean();
+    },
+
+    async getAll247Guilds() {
+      return model.find({ 'twentyFourSeven.enabled': true, 'twentyFourSeven.voiceChannelId': { $ne: null } }).lean();
+    },
+
     // ─── Activity Roles ───────────────────────────────────────────────────────
 
     async setActivityRole(guildId, activityType, { enabled, roleId }) {

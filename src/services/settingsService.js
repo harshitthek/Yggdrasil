@@ -33,6 +33,7 @@ export function normalizeGuildSettings(settings = {}) {
   const automod = mergeObject(DEFAULT_AUTOMOD, settings.automod ?? {});
   const moderation = mergeObject(DEFAULT_MODERATION_SETTINGS, settings.moderation ?? {});
   const activityRoles = mergeObject(DEFAULT_ACTIVITY_ROLES, settings.activityRoles ?? {});
+  const twentyFourSeven = settings.twentyFourSeven ?? { enabled: false, voiceChannelId: null, textChannelId: null };
 
   automod.enabled = Boolean(settings.automod?.enabled ?? settings.automodEnabled ?? automod.enabled);
 
@@ -46,6 +47,7 @@ export function normalizeGuildSettings(settings = {}) {
     automod,
     moderation,
     activityRoles,
+    twentyFourSeven,
     musicPanel,
     trustedAdminRoleIds: settings.trustedAdminRoleIds ?? [],
     featureToggles: {
@@ -219,6 +221,18 @@ export function createSettingsService(
       const settings = normalizeGuildSettings(await repository.removeActivityRole(guildId, activityType));
       clearCache(guildId);
       return settings;
+    },
+
+    // ─── 24/7 Voice ────────────────────────────────────────────────────────────
+
+    async set247(guildId, { enabled, voiceChannelId, textChannelId }) {
+      const updated = await repository.set247(guildId, { enabled, voiceChannelId, textChannelId });
+      clearCache(guildId);
+      return normalizeGuildSettings(updated);
+    },
+
+    async getAll247Guilds() {
+      return repository.getAll247Guilds();
     }
   };
 }

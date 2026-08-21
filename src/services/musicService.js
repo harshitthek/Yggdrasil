@@ -1,6 +1,7 @@
 import { Player } from 'discord-player';
 import { DefaultExtractors } from '@discord-player/extractor';
 import { YoutubeExtractor } from 'discord-player-youtubei';
+import { QUEUE_DEFAULTS, VOICE_CONNECTION_OPTIONS } from '../config/queueDefaults.js';
 import { buildNowPlayingEmbed, buildSuccessEmbed, buildErrorEmbed, buildNeutralEmbed } from '../utils/embeds.js';
 import { buildMusicPlayerComponents } from '../utils/components.js';
 import { logger } from '../utils/logger.js';
@@ -441,4 +442,64 @@ export async function initializePlayer(client, playerService) {
   });
 
   logger.info('Music player initialized successfully.');
+}
+
+/**
+ * Reconnects 24/7 enabled voice channels across all guilds on bot startup.
+ *
+ * @param {import('discord.js').Client} client
+ * @param {object} appContext
+ * @returns {Promise<void>}
+ */
+export async function reconnect247Guilds(client, appContext) {
+  const settingsService = appContext?.settingsService;
+  const player = appContext?.playerService?.getPlayer();
+  if (!settingsService || !player || !client) return;
+
+  try {
+    const records = await settingsService.getAll247Guilds();
+    if (!Array.isArray(records) || records.length === 0) return;
+
+    for (const record of records) {
+      try {
+        const guildId = record.guildId;
+        const voiceChannelId = record.twentyFourSeven?.voiceChannelId;
+        const textChannelId = record.twentyFourSeven?.textChannelId;
+        if (!guildId || !voiceChannelId) continue;
+
+        const guild = client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId).catch(() => null));
+        if (!guild) continue;
+
+        const voiceChannel =
+          guild.channels.cache.get(voiceChannelId) ?? (await guild.channels.fetch(voiceChannelId).catch(() => null));
+        if (!voiceChannel || !voiceChannel.isVoiceBased()) continue;
+
+        const textChannel = textChannelId
+          ? (guild.channels.cache.get(textChannelId) ?? (await guild.channels.fetch(textChannelId).catch(() => null)))
+          : null;
+
+        let queue = player.nodes.get(guildId);
+        if (!queue) {
+          queue = player.nodes.create(guild, {
+            ...QUEUE_DEFAULTS,
+            metadata: {
+              channel: textChannel,
+              is247: true
+            },
+            leaveOnEmpty: false,
+            leaveOnEnd: false
+          });
+        }
+
+        if (!queue.connection) {
+          await queue.connect(voiceChannel, VOICE_CONNECTION_OPTIONS);
+          logger.info(`[24/7] Restored voice connection to "${voiceChannel.name}" in guild "${guild.name}".`);
+        }
+      } catch (err) {
+        logger.warn(`[24/7] Failed to reconnect to guild ${record.guildId}:`, err);
+      }
+    }
+  } catch (error) {
+    logger.error('[24/7] Error restoring 24/7 voice channels:', error);
+  }
 }

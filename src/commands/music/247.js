@@ -13,7 +13,7 @@ export const data = new SlashCommandBuilder()
   .setName('247')
   .setDescription('Toggles 24/7 mode, making the bot stay in the voice channel forever.');
 
-async function execute247(voiceChannel, textChannel, playerService, respond) {
+async function execute247(voiceChannel, textChannel, playerService, settingsService, respond) {
   if (!voiceChannel) {
     return respond({
       embeds: [buildErrorEmbed('Voice Channel Required', 'You need to be in a voice channel to enable 24/7 mode.')]
@@ -37,6 +37,7 @@ async function execute247(voiceChannel, textChannel, playerService, respond) {
   }
 
   const currentMode = Boolean(queue?.metadata?.is247);
+  const nextMode = !currentMode;
 
   if (!queue) {
     queue = musicPlayer.nodes.create(voiceChannel.guild, {
@@ -60,16 +61,24 @@ async function execute247(voiceChannel, textChannel, playerService, respond) {
   }
 
   // Toggle 24/7 mode
-  queue.metadata = { ...(queue.metadata ?? {}), is247: !currentMode };
+  queue.metadata = { ...(queue.metadata ?? {}), is247: nextMode };
 
-  if (queue.metadata.is247) {
+  if (settingsService) {
+    await settingsService.set247(voiceChannel.guild.id, {
+      enabled: nextMode,
+      voiceChannelId: nextMode ? voiceChannel.id : null,
+      textChannelId: nextMode ? textChannel?.id : null
+    });
+  }
+
+  if (nextMode) {
     queue.options.leaveOnEmpty = false;
     queue.options.leaveOnEnd = false;
     return respond({
       embeds: [
         buildSuccessEmbed(
           '24/7 Mode Enabled',
-          'I will now stay in the voice channel 24/7, even when nothing is playing.'
+          'I will now stay in the voice channel 24/7, even when nothing is playing and across restarts.'
         )
       ]
     });
@@ -87,8 +96,9 @@ export async function execute(interaction) {
   const textChannel = interaction.channel;
   const appContext = getAppContext(interaction) ?? {};
   const playerService = appContext.playerService ?? null;
+  const settingsService = appContext.settingsService ?? null;
 
-  await execute247(voiceChannel, textChannel, playerService, async (payload) => {
+  await execute247(voiceChannel, textChannel, playerService, settingsService, async (payload) => {
     if (interaction.replied || interaction.deferred) {
       await interaction.followUp(payload);
     } else {
@@ -101,8 +111,9 @@ export async function executeMessage(context) {
   const voiceChannel = context.member.voice.channel;
   const textChannel = context.message.channel;
   const playerService = context.appContext?.playerService ?? null;
+  const settingsService = context.appContext?.settingsService ?? null;
 
-  await execute247(voiceChannel, textChannel, playerService, async (payload) => {
+  await execute247(voiceChannel, textChannel, playerService, settingsService, async (payload) => {
     await context.respond(payload);
   });
 }
