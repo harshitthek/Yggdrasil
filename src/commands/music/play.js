@@ -133,12 +133,18 @@ export async function executePlay(query, voiceChannel, user, textChannel, player
   }
 
   // ─── Enqueue ────────────────────────────────────────────────────────────
-  const is247 = existingQueue?.metadata?.is247 ?? false;
+  let is247 = existingQueue?.metadata?.is247;
+  if (is247 === undefined && options?.settingsService) {
+    const settings = await options.settingsService.getSettings(voiceChannel.guild.id).catch(() => null);
+    is247 = Boolean(settings?.twentyFourSeven?.enabled);
+  }
+  is247 = Boolean(is247);
+
   const queue = musicPlayer.nodes.create(voiceChannel.guild, {
     ...QUEUE_DEFAULTS,
     metadata: existingQueue?.metadata ?? {
       channel: textChannel,
-      is247: false,
+      is247,
       correlationId: `[MUSIC:${crypto.randomUUID().slice(0, 6)}]`
     },
     leaveOnEmpty: is247 ? false : QUEUE_DEFAULTS.leaveOnEmpty,
@@ -223,6 +229,8 @@ export async function execute(interaction) {
   const appContext = getAppContext(interaction) ?? {};
   const playerService = appContext.playerService ?? null;
 
+  const settingsService = appContext.settingsService ?? null;
+
   await executePlay(
     query,
     voiceChannel,
@@ -232,7 +240,10 @@ export async function execute(interaction) {
     async (payload) => {
       await interaction.editReply(payload);
     },
-    { useLocalYoutubeExtractor: appContext.config?.useLocalYoutubeExtractor === true }
+    {
+      useLocalYoutubeExtractor: appContext.config?.useLocalYoutubeExtractor === true,
+      settingsService
+    }
   );
 }
 
@@ -255,6 +266,7 @@ export async function executeMessage(context) {
   const voiceChannel = context.member.voice.channel;
   const textChannel = context.message.channel;
   const playerService = context.appContext?.playerService ?? null;
+  const settingsService = context.appContext?.settingsService ?? null;
 
   await executePlay(
     query,
@@ -265,6 +277,9 @@ export async function executeMessage(context) {
     async (payload) => {
       await context.respond(payload);
     },
-    { useLocalYoutubeExtractor: context.appContext?.config?.useLocalYoutubeExtractor === true }
+    {
+      useLocalYoutubeExtractor: context.appContext?.config?.useLocalYoutubeExtractor === true,
+      settingsService
+    }
   );
 }

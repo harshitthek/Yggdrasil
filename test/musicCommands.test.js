@@ -170,3 +170,65 @@ test('formatMusicErrorMessage handles non-Error thrown values', () => {
   assert.equal(formatMusicErrorMessage(new Error('stream failed')), 'stream failed');
   assert.equal(formatMusicErrorMessage('x'.repeat(200)).length, 150);
 });
+
+test('reconnect247Guilds reconnects to voice channels from database settings', async () => {
+  const { reconnect247Guilds } = await import('../src/services/musicService.js');
+
+  let connectedChannel = null;
+  const mockQueue = {
+    connection: null,
+    connect: async (channel) => {
+      connectedChannel = channel;
+      mockQueue.connection = {};
+    }
+  };
+
+  const mockGuild = {
+    id: 'guild-1',
+    name: 'Test Guild',
+    channels: {
+      cache: new Map([
+        [
+          'voice-123',
+          {
+            id: 'voice-123',
+            name: 'General Voice',
+            isVoiceBased: () => true
+          }
+        ]
+      ])
+    }
+  };
+
+  const mockClient = {
+    guilds: {
+      cache: new Map([['guild-1', mockGuild]])
+    }
+  };
+
+  const mockAppContext = {
+    settingsService: {
+      getAll247Guilds: async () => [
+        {
+          guildId: 'guild-1',
+          twentyFourSeven: {
+            enabled: true,
+            voiceChannelId: 'voice-123',
+            textChannelId: 'text-123'
+          }
+        }
+      ]
+    },
+    playerService: {
+      getPlayer: () => ({
+        nodes: {
+          get: () => null,
+          create: () => mockQueue
+        }
+      })
+    }
+  };
+
+  await reconnect247Guilds(mockClient, mockAppContext);
+  assert.equal(connectedChannel?.id, 'voice-123');
+});

@@ -11,7 +11,7 @@ export const requiresSameVoiceChannel = true;
 
 export const data = new SlashCommandBuilder().setName('join').setDescription('Makes the bot join your voice channel.');
 
-async function executeJoin(voiceChannel, textChannel, playerService, respond) {
+async function executeJoin(voiceChannel, textChannel, playerService, settingsService, respond) {
   if (!voiceChannel) {
     return respond({
       embeds: [buildErrorEmbed('Voice Channel Required', 'You need to be in a voice channel for me to join.')]
@@ -34,13 +34,22 @@ async function executeJoin(voiceChannel, textChannel, playerService, respond) {
     });
   }
 
+  let is247 = queue?.metadata?.is247;
+  if (is247 === undefined && settingsService) {
+    const settings = await settingsService.getSettings(voiceChannel.guild.id).catch(() => null);
+    is247 = Boolean(settings?.twentyFourSeven?.enabled);
+  }
+  is247 = Boolean(is247);
+
   if (!queue) {
     queue = musicPlayer.nodes.create(voiceChannel.guild, {
       ...QUEUE_DEFAULTS,
       metadata: {
         channel: textChannel,
-        is247: false
-      }
+        is247
+      },
+      leaveOnEmpty: is247 ? false : QUEUE_DEFAULTS.leaveOnEmpty,
+      leaveOnEnd: is247 ? false : QUEUE_DEFAULTS.leaveOnEnd
     });
   }
 
@@ -63,8 +72,9 @@ export async function execute(interaction) {
   const textChannel = interaction.channel;
   const appContext = getAppContext(interaction) ?? {};
   const playerService = appContext.playerService ?? null;
+  const settingsService = appContext.settingsService ?? null;
 
-  await executeJoin(voiceChannel, textChannel, playerService, async (payload) => {
+  await executeJoin(voiceChannel, textChannel, playerService, settingsService, async (payload) => {
     if (interaction.replied || interaction.deferred) {
       await interaction.followUp(payload);
     } else {
@@ -77,10 +87,11 @@ export async function executeMessage(context) {
   const voiceChannel = context.member.voice.channel;
   const textChannel = context.message.channel;
   const playerService = context.appContext?.playerService ?? null;
+  const settingsService = context.appContext?.settingsService ?? null;
 
   const respondFn = async (payload) => {
     await context.respond(payload);
   };
 
-  await executeJoin(voiceChannel, textChannel, playerService, respondFn);
+  await executeJoin(voiceChannel, textChannel, playerService, settingsService, respondFn);
 }

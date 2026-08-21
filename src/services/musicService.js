@@ -467,15 +467,23 @@ export async function reconnect247Guilds(client, appContext) {
         const textChannelId = record.twentyFourSeven?.textChannelId;
         if (!guildId || !voiceChannelId) continue;
 
-        const guild = client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId).catch(() => null));
+        const guild =
+          client.guilds?.cache?.get(guildId) ??
+          (typeof client.guilds?.fetch === 'function' ? await client.guilds.fetch(guildId).catch(() => null) : null);
         if (!guild) continue;
 
         const voiceChannel =
-          guild.channels.cache.get(voiceChannelId) ?? (await guild.channels.fetch(voiceChannelId).catch(() => null));
-        if (!voiceChannel || !voiceChannel.isVoiceBased()) continue;
+          guild.channels?.cache?.get(voiceChannelId) ??
+          (typeof guild.channels?.fetch === 'function'
+            ? await guild.channels.fetch(voiceChannelId).catch(() => null)
+            : null);
+        if (!voiceChannel || (typeof voiceChannel.isVoiceBased === 'function' && !voiceChannel.isVoiceBased())) continue;
 
         const textChannel = textChannelId
-          ? (guild.channels.cache.get(textChannelId) ?? (await guild.channels.fetch(textChannelId).catch(() => null)))
+          ? guild.channels?.cache?.get(textChannelId) ??
+            (typeof guild.channels?.fetch === 'function'
+              ? await guild.channels.fetch(textChannelId).catch(() => null)
+              : null)
           : null;
 
         let queue = player.nodes.get(guildId);
