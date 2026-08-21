@@ -7,22 +7,26 @@ const rootDir = process.cwd();
 const nodeModulesDir = join(rootDir, 'node_modules');
 
 function setupYtDlp() {
+  if (process.env.YOUTUBE_DL_SKIP_DOWNLOAD === 'true') {
+    return;
+  }
+
   const ytdlExecScript = join(nodeModulesDir, 'youtube-dl-exec', 'scripts', 'postinstall.js');
   if (existsSync(ytdlExecScript)) {
     try {
       execSync(`node "${ytdlExecScript}"`, { stdio: 'ignore' });
-    } catch (_) {}
+    } catch {}
   }
 
   if (platform() === 'linux') {
     const targetYtDlp = join(nodeModulesDir, 'youtube-dl-exec', 'bin', 'yt-dlp');
-    const systemYtDlp = ['/usr/local/bin/yt-dlp', '/usr/bin/yt-dlp'].find(p => existsSync(p));
-    
+    const systemYtDlp = ['/usr/local/bin/yt-dlp', '/usr/bin/yt-dlp'].find((p) => existsSync(p));
+
     if (systemYtDlp) {
       try {
         if (existsSync(targetYtDlp)) unlinkSync(targetYtDlp);
         symlinkSync(systemYtDlp, targetYtDlp);
-      } catch (_) {}
+      } catch {}
     }
   }
 }
@@ -36,7 +40,7 @@ function setupFFmpeg() {
       try {
         if (existsSync(targetFFmpeg)) unlinkSync(targetFFmpeg);
         symlinkSync(systemFFmpeg, targetFFmpeg);
-      } catch (_) {}
+      } catch {}
     }
   }
 }
@@ -44,4 +48,4 @@ function setupFFmpeg() {
 try {
   setupYtDlp();
   setupFFmpeg();
-} catch (_) {}
+} catch {}

@@ -433,10 +433,10 @@ export class WorldTreeYoutubeExtractor extends BaseExtractor {
             setTimeout(() => {
               try {
                 if (!process.killed) process.kill('SIGKILL');
-              } catch (_) {}
+              } catch {}
             }, 3000).unref?.();
           }
-        } catch (_) {}
+        } catch {}
       };
 
       stream.once('close', terminateProcess);
