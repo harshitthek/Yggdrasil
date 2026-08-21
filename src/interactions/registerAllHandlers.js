@@ -25,6 +25,7 @@ import * as musicPlayback from './musicPlaybackInteractionHandler.js';
 import * as musicSettings from './musicSettingsInteractionHandler.js';
 import * as ping from './pingInteractionHandler.js';
 import * as queue from './queueInteractionHandler.js';
+import * as recording from './recordingInteractionHandler.js';
 import * as search from './searchInteractionHandler.js';
 import * as settingsButton from './settingsButtonInteractionHandler.js';
 
@@ -46,6 +47,7 @@ export function registerAllInteractionHandlers() {
   registerHandler(musicFilter);
   registerHandler(search);
   registerHandler(help);
+  registerHandler(recording);
 }
 
 /**
