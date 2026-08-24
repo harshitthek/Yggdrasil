@@ -84,6 +84,22 @@ impl AudioSession {
         self.frame_queue.len()
     }
 
+    pub fn pause(&self) {
+        self.paused.store(true, Ordering::SeqCst);
+    }
+
+    pub fn resume(&self) {
+        self.paused.store(false, Ordering::SeqCst);
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.paused.load(Ordering::SeqCst)
+    }
+
+    pub fn frames_encoded(&self) -> u64 {
+        self.frames_encoded.load(Ordering::Relaxed)
+    }
+
     pub fn is_high_watermark(&self) -> bool {
         self.frame_queue.len() >= 250 // 5 seconds buffered
     }

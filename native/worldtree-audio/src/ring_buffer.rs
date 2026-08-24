@@ -35,10 +35,12 @@ impl OpusFrameQueue {
         cons.slots()
     }
 
+    #[allow(dead_code)]
     pub fn capacity(&self) -> usize {
         self.capacity
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         let cons = self.consumer.lock();
         cons.is_empty()

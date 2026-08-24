@@ -11,7 +11,9 @@ use crate::error::AudioEngineError;
 
 /// High-throughput in-memory audio decoder utilizing Symphonia.
 pub struct ChunkDecoder {
+    #[allow(dead_code)]
     sample_rate: u32,
+    #[allow(dead_code)]
     channels: u32,
 }
 

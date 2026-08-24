@@ -4,7 +4,9 @@ use crate::error::AudioEngineError;
 /// SIMD-accelerated FFT sinc resampler.
 pub struct AudioResampler {
     resampler: Option<FftFixedIn<f32>>,
+    #[allow(dead_code)]
     source_rate: u32,
+    #[allow(dead_code)]
     target_rate: u32,
 }
 

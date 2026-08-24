@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 napi = { version = "2.16", default-features = false, features = ["napi4", "async", "tokio_rt"] }
 napi-derive = "2.16"
 symphonia = { version = "0.5", features = ["all"] }
-rubato = { version = "0.15", features = ["simd"] }
+rubato = "0.15"
 audiopus_sys = "0.2"
 rtrb = "0.3"
 parking_lot = "0.12"

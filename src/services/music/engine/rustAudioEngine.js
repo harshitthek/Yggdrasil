@@ -83,13 +83,14 @@ export class RustAudioSession {
    * @returns {object} Backpressure status
    */
   pushChunk(chunk, inputStream = null) {
-    if (this.destroyed) return null;
+    if (this.destroyed || !this.binding) return null;
     const status = this.binding.push_chunk(this.sessionId, chunk);
+    if (!status) return null;
 
     if (inputStream) {
-      if (status.should_pause && !inputStream.isPaused()) {
+      if (status.should_pause && typeof inputStream.pause === 'function' && !inputStream.isPaused?.()) {
         inputStream.pause();
-      } else if (status.should_resume && inputStream.isPaused()) {
+      } else if (status.should_resume && typeof inputStream.resume === 'function' && inputStream.isPaused?.()) {
         inputStream.resume();
       }
     }
@@ -102,17 +103,17 @@ export class RustAudioSession {
    * @returns {Buffer|null}
    */
   popOpusFrame() {
-    if (this.destroyed) return null;
+    if (this.destroyed || !this.binding) return null;
     return this.binding.pop_opus_frame(this.sessionId);
   }
 
   setVolume(volume) {
-    if (this.destroyed) return;
+    if (this.destroyed || !this.binding) return;
     this.binding.set_volume(this.sessionId, volume);
   }
 
   setFilter(filterName, enabled, value = null) {
-    if (this.destroyed) return;
+    if (this.destroyed || !this.binding) return;
     this.binding.set_filter(this.sessionId, filterName, enabled, value);
   }
 
@@ -120,7 +121,7 @@ export class RustAudioSession {
     if (this.destroyed) return;
     this.destroyed = true;
     try {
-      this.binding.destroy_session(this.sessionId);
+      this.binding?.destroy_session?.(this.sessionId);
     } catch {
       // Ignore cleanup error
     }

@@ -84,40 +84,64 @@ async function executeSwitch(guildId, targetType, member, respond) {
 }
 
 export async function execute(interaction) {
-  const sub = interaction.options.getSubcommand() || 'status';
+  const sub = interaction.options?.getSubcommand?.() || 'status';
   const guildId = interaction.guild?.id;
 
-  if (sub === 'status') {
-    await executeStatus(guildId, async (payload) => {
-      if (interaction.replied || interaction.deferred) await interaction.followUp(payload);
-      else await interaction.reply(payload);
-    });
-  } else if (sub === 'switch') {
-    const targetType = interaction.options.getString('type');
-    await executeSwitch(guildId, targetType, interaction.member, async (payload) => {
-      if (interaction.replied || interaction.deferred) await interaction.followUp(payload);
-      else await interaction.reply(payload);
-    });
+  try {
+    if (sub === 'status') {
+      await executeStatus(guildId, async (payload) => {
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp(payload).catch(() => null);
+        } else {
+          await interaction.reply(payload).catch(() => null);
+        }
+      });
+    } else if (sub === 'switch') {
+      const targetType = interaction.options?.getString?.('type');
+      await executeSwitch(guildId, targetType, interaction.member, async (payload) => {
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp(payload).catch(() => null);
+        } else {
+          await interaction.reply(payload).catch(() => null);
+        }
+      });
+    }
+  } catch {
+    if (interaction.replied || interaction.deferred) {
+      await interaction
+        .followUp({ embeds: [buildErrorEmbed('Engine Error', 'Failed to process engine command.')], ephemeral: true })
+        .catch(() => null);
+    } else {
+      await interaction
+        .reply({ embeds: [buildErrorEmbed('Engine Error', 'Failed to process engine command.')], ephemeral: true })
+        .catch(() => null);
+    }
   }
 }
 
 export async function executeMessage(context) {
-  const sub = context.args[0]?.toLowerCase();
+  const sub = context.args?.[0]?.toLowerCase();
   const guildId = context.guild?.id;
 
-  if (sub === 'switch' && context.args[1]) {
-    const targetType = context.args[1].toLowerCase();
-    if (!['js', 'rust', 'auto'].includes(targetType)) {
-      return context.respond({
-        embeds: [buildErrorEmbed('Invalid Engine', 'Valid options: `js`, `rust`, `auto`')]
+  try {
+    if (sub === 'switch' && context.args?.[1]) {
+      const targetType = context.args[1].toLowerCase();
+      if (!['js', 'rust', 'auto'].includes(targetType)) {
+        return context.respond({
+          embeds: [buildErrorEmbed('Invalid Engine', 'Valid options: `js`, `rust`, `auto`')]
+        });
+      }
+      await executeSwitch(guildId, targetType, context.member, async (payload) => {
+        await context.respond(payload).catch(() => null);
+      });
+    } else {
+      await executeStatus(guildId, async (payload) => {
+        await context.respond(payload).catch(() => null);
       });
     }
-    await executeSwitch(guildId, targetType, context.member, async (payload) => {
-      await context.respond(payload);
-    });
-  } else {
-    await executeStatus(guildId, async (payload) => {
-      await context.respond(payload);
-    });
+  } catch {
+    await context
+      .respond({ embeds: [buildErrorEmbed('Engine Error', 'Failed to process engine command.')] })
+      .catch(() => null);
   }
 }
