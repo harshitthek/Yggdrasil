@@ -249,22 +249,21 @@ export async function initializePlayer(client, playerService) {
     })
   );
 
-  // 1. Load default extractors (SoundCloud, Spotify metadata, Apple metadata, etc.)
-  try {
-    await player.extractors.loadMulti(DefaultExtractors);
-  } catch (err) {
-    logger.error('Failed to load DefaultExtractors. Some sources may be unavailable.', err);
-  }
-
-  // 2. Register exactly one YouTube boundary. The upstream extractor remains
-  //    the default until the local path is explicitly enabled.
+  // 1. Register YouTube extractor first so YouTube is preferred for search and bridging
   try {
     const registration = getYoutubeExtractorRegistration(useLocalYoutubeExtractor);
     await player.extractors.register(registration.extractor, registration.options);
 
-    logger.info(`Music extractors loaded: DefaultExtractors + ${registration.label}`);
+    logger.info(`Music extractors loaded: ${registration.label} + DefaultExtractors`);
   } catch (err) {
     logger.error('Failed to register the active YouTube extractor. Music playback will be unavailable.', err);
+  }
+
+  // 2. Load default extractors (Spotify metadata, Apple metadata, SoundCloud, etc.)
+  try {
+    await player.extractors.loadMulti(DefaultExtractors);
+  } catch (err) {
+    logger.error('Failed to load DefaultExtractors. Some sources may be unavailable.', err);
   }
 
   // ─── Player Events ──────────────────────────────────────────────────────

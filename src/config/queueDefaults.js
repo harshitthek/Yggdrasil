@@ -23,14 +23,15 @@ export const QUEUE_DEFAULTS = Object.freeze({
   volume: 80,
   /**
    * Maximum ms the player waits for the audio buffer to fill before giving
-   * up. Higher value provides stable, jitter-free buffer headroom.
+   * up. Lower values reduce the perceived "delay before music starts";
+   * higher values help on slow connections. 3 s is a good middle ground.
    */
-  bufferingTimeout: 5_000
+  bufferingTimeout: 3_000
 });
 
-// discord-player 7 enables DAVE by default. Its pure JS MLS implementation can
-// cause periodic event-loop latency spikes and micro-buffering. Use Discord's
-// hardware-accelerated standard voice transport encryption for crystal clear playback.
+// discord-player 7 enables DAVE by default. Its current voice stack can end
+// outgoing audio immediately after a DAVE transition, so keep Discord's normal
+// voice encryption enabled for end-to-end voice channel protocol compliance.
 export const VOICE_CONNECTION_OPTIONS = Object.freeze({
-  daveEncryption: false
+  daveEncryption: true
 });
