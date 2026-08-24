@@ -1,1 +1,0 @@
-source ops/lib/providers/template.sh && echo -e "$PROVIDER_API\n$(provider_name)"
