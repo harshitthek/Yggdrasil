@@ -576,8 +576,10 @@ export async function reconnect247Guilds(client, appContext, { quiet = false } =
         }
 
         // Case 2: Bot permissions check
-        const botMember = guild.members?.me ?? (await guild.members.fetchMe?.().catch(() => null));
-        if (botMember) {
+        const botMember =
+          guild.members?.me ??
+          (typeof guild.members?.fetchMe === 'function' ? await guild.members.fetchMe().catch(() => null) : null);
+        if (botMember && typeof voiceChannel.permissionsFor === 'function') {
           const permissions = voiceChannel.permissionsFor(botMember);
           if (permissions && (!permissions.has('ViewChannel') || !permissions.has('Connect'))) {
             logger.warn(
