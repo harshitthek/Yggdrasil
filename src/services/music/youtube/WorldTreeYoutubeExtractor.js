@@ -228,6 +228,31 @@ export class WorldTreeYoutubeExtractor extends BaseExtractor {
   }
 
   /**
+   * Fetch related tracks for autoplay / recommendation.
+   *
+   * @param {import('discord-player').Track} track Source track.
+   * @param {import('discord-player').GuildQueueHistory} [history] Queue history.
+   * @returns {Promise<import('discord-player').ExtractorInfo>}
+   */
+  async getRelatedTracks(track, history) {
+    this.#assertActive();
+    try {
+      const query = track?.author ? `${track.author} ${track.title}` : track?.title;
+      if (!query) return this.createResponse();
+
+      const res = await this.#searchTracks(query, track?.requestedBy ?? null);
+      if (!res?.tracks?.length) return this.createResponse();
+
+      const historyUrls = new Set(history?.tracks?.map((t) => t.url) ?? []);
+      const unique = res.tracks.filter((t) => !historyUrls.has(t.url));
+      return this.createResponse(null, unique.length > 0 ? unique : res.tracks);
+    } catch (error) {
+      this.#debug(`getRelatedTracks failed: ${error?.message || error}`);
+      return this.createResponse();
+    }
+  }
+
+  /**
    * Run a debug-only diagnostic with this extractor's active Innertube client.
    * The caller owns timeout and in-flight coordination so this method remains
    * limited to the actual diagnostic work.

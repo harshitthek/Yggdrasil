@@ -326,11 +326,55 @@ export async function initializePlayer(client, playerService) {
     }
 
     const emoji = getSourceEmoji(track);
-    safeSend(queue, {
-      embeds: [buildNowPlayingEmbed(track, queue)],
-      components: buildMusicPlayerComponents()
-    });
+    try {
+      safeSend(queue, {
+        embeds: [buildNowPlayingEmbed(track, queue)],
+        components: buildMusicPlayerComponents()
+      });
+    } catch (err) {
+      logger.error('Failed to send Now Playing embed on playerStart.', err);
+    }
     logger.info(`Now playing: ${emoji} ${track.title} — ${track.author} [${getSourceLabel(track)}]`);
+  });
+
+  // ── willAutoPlay: continuous autoplay recommendation with multi-source fallback ──
+  player.events.on('willAutoPlay', async (queue, tracks, done) => {
+    dbg(queue, `willAutoPlay: candidate count = ${tracks?.length || 0}`);
+    try {
+      // 1. If extractor provided candidate tracks, filter history and select first unplayed
+      if (Array.isArray(tracks) && tracks.length > 0) {
+        const historyUrls = new Set(queue.history?.tracks?.map((t) => t.url) ?? []);
+        const unplayed = tracks.filter((t) => !historyUrls.has(t.url));
+        const chosen = unplayed[0] || tracks[Math.floor(Math.random() * Math.min(tracks.length, 5))];
+        if (chosen) {
+          dbg(queue, `willAutoPlay: selected candidate track "${chosen.title}"`);
+          return done(chosen);
+        }
+      }
+
+      // 2. If extractor candidates were empty, perform fallback recommendation search using current or seed track
+      const seedTrack = queue.currentTrack || queue.history?.currentTrack || queue.history?.tracks?.[0];
+      if (seedTrack) {
+        const query = seedTrack.author ? `${seedTrack.author} radio` : seedTrack.title;
+        dbg(queue, `willAutoPlay: attempting fallback query "${query}"`);
+        const searchResult = await player.search(query, {
+          requestedBy: seedTrack.requestedBy || client.user
+        });
+        if (searchResult?.hasTracks()) {
+          const historyUrls = new Set(queue.history?.tracks?.map((t) => t.url) ?? []);
+          const unplayed = searchResult.tracks.filter((t) => !historyUrls.has(t.url));
+          const next = unplayed[0] || searchResult.tracks[0];
+          if (next) {
+            dbg(queue, `willAutoPlay: fallback selected "${next.title}"`);
+            return done(next);
+          }
+        }
+      }
+    } catch (err) {
+      dbgErr(queue, 'Error in willAutoPlay resolver:', err);
+    }
+
+    done(null);
   });
 
   // ── playerFinish: confirms whether playback completed normally ──

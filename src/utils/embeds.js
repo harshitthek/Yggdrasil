@@ -124,14 +124,14 @@ export function buildNowPlayingEmbed(track, queue) {
     `${source} · 🔊 ${queue.node.volume ?? 80}% · 🔄 ${loopLabel}`,
     '',
     `👤 **Requested by:** ${requesterMention}`,
-    `⏱️ **Duration:** \`${track.duration}\` · 📜 **Queue:** \`${queue.tracks.data.length} track(s)\``
+    `⏱️ **Duration:** \`${track.duration}\` · 📜 **Queue:** \`${queue.tracks?.data?.length ?? queue.tracks?.size ?? 0} track(s)\``
   ].join('\n');
 
   const embed = buildBaseEmbed({ color: COLORS.brand })
     .setAuthor({ name: '♫ Now Playing', iconURL: track.requestedBy?.displayAvatarURL?.() || undefined })
     .setDescription(description);
 
-  const nextTrack = queue.tracks?.data?.[0];
+  const nextTrack = queue.tracks?.data?.[0] ?? (typeof queue.tracks?.at === 'function' ? queue.tracks.at(0) : null);
   if (nextTrack) {
     embed.addFields({
       name: '⏭️ Up Next',
@@ -156,7 +156,8 @@ export function buildMusicPlayerEmbed(track, queue) {
 
 export function buildQueueEmbed(queue) {
   const currentTrack = queue.currentTrack;
-  const tracks = queue.tracks.data.slice(0, 10);
+  const rawTracks = queue.tracks?.data ?? (typeof queue.tracks?.toArray === 'function' ? queue.tracks.toArray() : []);
+  const tracks = rawTracks.slice(0, 10);
   const loopLabel = getLoopLabel(queue.repeatMode);
 
   let description = '';
