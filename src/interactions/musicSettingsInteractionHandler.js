@@ -1,18 +1,26 @@
 import { buildNeutralEmbed, buildErrorEmbed } from '../utils/embeds.js';
 import { buildSettingsComponents } from '../utils/components.js';
+import { replyToInteraction } from '../utils/responses.js';
 
 function getQueue(interaction) {
   return interaction.appContext?.playerService?.getGuildQueue(interaction.guildId);
+}
+
+async function safeRespond(interaction, payload, options = { ephemeral: true }) {
+  try {
+    return await replyToInteraction(interaction, payload, options);
+  } catch {
+    /* interaction already handled or token expired */
+  }
 }
 
 async function requireQueue(interaction, resolveQueue = getQueue) {
   const queue = resolveQueue(interaction);
 
   if (!queue || !queue.currentTrack) {
-    await interaction.reply({
-      embeds: [buildErrorEmbed('No Active Session', 'Nothing is playing right now. Use `tree play` to start.')],
-      flags: 64
-    });
+    await safeRespond(interaction, {
+      embeds: [buildErrorEmbed('No Active Session', 'Nothing is playing right now. Use `tree play` to start.')]
+    }, { ephemeral: true });
     return null;
   }
 
@@ -48,11 +56,10 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
     return true;
   }
 
-  await interaction.reply({
+  await safeRespond(interaction, {
     embeds: [buildNeutralEmbed('⚙️ Playback Settings', buildPlaybackSettingsCopy(queue))],
-    components: buildSettingsComponents(queue),
-    flags: 64
-  });
+    components: buildSettingsComponents(queue)
+  }, { ephemeral: true });
 
   return true;
 }

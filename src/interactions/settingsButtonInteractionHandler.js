@@ -1,5 +1,6 @@
 import { buildNeutralEmbed, buildSuccessEmbed, buildErrorEmbed } from '../utils/embeds.js';
 import { buildSettingsComponents, buildFilterComponents } from '../utils/components.js';
+import { replyToInteraction } from '../utils/responses.js';
 
 /**
  * @file Interaction handler for the settings panel buttons.
@@ -18,6 +19,14 @@ import { buildSettingsComponents, buildFilterComponents } from '../utils/compone
 
 function getQueue(interaction) {
   return interaction.appContext?.playerService?.getGuildQueue(interaction.guildId);
+}
+
+async function safeRespond(interaction, payload, options = { ephemeral: true }) {
+  try {
+    return await replyToInteraction(interaction, payload, options);
+  } catch {
+    /* interaction already handled or token expired */
+  }
 }
 
 function requireQueue(interaction, resolveQueue = getQueue) {
@@ -43,10 +52,9 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
 
   const queue = requireQueue(interaction, resolveQueue);
   if (!queue) {
-    await interaction.reply({
-      embeds: [buildErrorEmbed('No Active Session', 'Nothing is playing right now. Use `tree play` to start.')],
-      flags: 64
-    });
+    await safeRespond(interaction, {
+      embeds: [buildErrorEmbed('No Active Session', 'Nothing is playing right now. Use `tree play` to start.')]
+    }, { ephemeral: true });
     return true;
   }
 
@@ -55,31 +63,37 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
   // ─── Loop Mode Buttons ──────────────────────────────────────────────────
   if (id === 'settings_loop_off') {
     queue.setRepeatMode(0);
-    await interaction.deferUpdate();
-    await interaction.editReply({
-      embeds: [buildNeutralEmbed('⚙️ Playback Settings', buildSettingsCopy(queue))],
-      components: buildSettingsComponents(queue)
-    });
+    try {
+      await interaction.deferUpdate();
+      await interaction.editReply({
+        embeds: [buildNeutralEmbed('⚙️ Playback Settings', buildSettingsCopy(queue))],
+        components: buildSettingsComponents(queue)
+      });
+    } catch {}
     return true;
   }
 
   if (id === 'settings_loop_track') {
     queue.setRepeatMode(1);
-    await interaction.deferUpdate();
-    await interaction.editReply({
-      embeds: [buildNeutralEmbed('⚙️ Playback Settings', buildSettingsCopy(queue))],
-      components: buildSettingsComponents(queue)
-    });
+    try {
+      await interaction.deferUpdate();
+      await interaction.editReply({
+        embeds: [buildNeutralEmbed('⚙️ Playback Settings', buildSettingsCopy(queue))],
+        components: buildSettingsComponents(queue)
+      });
+    } catch {}
     return true;
   }
 
   if (id === 'settings_loop_queue') {
     queue.setRepeatMode(2);
-    await interaction.deferUpdate();
-    await interaction.editReply({
-      embeds: [buildNeutralEmbed('⚙️ Playback Settings', buildSettingsCopy(queue))],
-      components: buildSettingsComponents(queue)
-    });
+    try {
+      await interaction.deferUpdate();
+      await interaction.editReply({
+        embeds: [buildNeutralEmbed('⚙️ Playback Settings', buildSettingsCopy(queue))],
+        components: buildSettingsComponents(queue)
+      });
+    } catch {}
     return true;
   }
 
@@ -87,21 +101,22 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
   if (id === 'settings_autoplay') {
     const newMode = queue.repeatMode === 3 ? 0 : 3;
     queue.setRepeatMode(newMode);
-    await interaction.deferUpdate();
-    await interaction.editReply({
-      embeds: [buildNeutralEmbed('⚙️ Playback Settings', buildSettingsCopy(queue))],
-      components: buildSettingsComponents(queue)
-    });
+    try {
+      await interaction.deferUpdate();
+      await interaction.editReply({
+        embeds: [buildNeutralEmbed('⚙️ Playback Settings', buildSettingsCopy(queue))],
+        components: buildSettingsComponents(queue)
+      });
+    } catch {}
     return true;
   }
 
   // ─── Open Filters Panel ─────────────────────────────────────────────────
   if (id === 'settings_filters') {
-    await interaction.reply({
+    await safeRespond(interaction, {
       embeds: [buildSuccessEmbed('🎛️ Audio Filters', 'Select a filter to toggle, or clear all active filters.')],
-      components: buildFilterComponents(),
-      flags: 64
-    });
+      components: buildFilterComponents()
+    }, { ephemeral: true });
     return true;
   }
 

@@ -76,12 +76,11 @@ export async function handleComponentInteraction(interaction) {
   } catch (error) {
     logger.error('Component interaction error.', error);
     try {
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({
-          embeds: [buildErrorEmbed('Error', 'Something went wrong. Please try again.')],
-          flags: 64
-        });
-      }
+      await replyToInteraction(
+        interaction,
+        { embeds: [buildErrorEmbed('Error', 'Something went wrong. Please try again.')] },
+        { ephemeral: true }
+      );
     } catch {
       /* interaction expired */
     }
