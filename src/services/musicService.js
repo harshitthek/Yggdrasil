@@ -339,20 +339,38 @@ export async function initializePlayer(client, playerService) {
     dbg(queue, `playerFinish: "${track?.title || 'unknown'}"`);
   });
 
+  const lastErrorSent = new Map();
+
+  function shouldSendError(guildId, error) {
+    const msg = error?.message || String(error);
+    if (/IP discovery|socket closed|aborted|ABORT_ERR|ECONNRESET|EPIPE|Networking error|VoiceConnection/i.test(msg)) {
+      return false;
+    }
+    const now = Date.now();
+    if (guildId) {
+      const lastSent = lastErrorSent.get(guildId) || 0;
+      if (now - lastSent < 30000) return false;
+      lastErrorSent.set(guildId, now);
+    }
+    return true;
+  }
+
   // ── playerError: single handler for both logging and user notification ──
   player.events.on('playerError', (queue, error, track) => {
     const trackInfo = track ? `**${track.title}**` : 'the current track';
     dbgErr(queue, `playerError: track="${track?.title || 'unknown'}"`, error);
     logger.error(`Player track error on ${trackInfo}.`, error);
 
-    safeSend(queue, {
-      embeds: [
-        buildErrorEmbed(
-          'Track Error',
-          `Failed to stream ${trackInfo}.\n\`\`\`${formatPlaybackError(error)}\`\`\`\nTry playing it again or use a different source.`
-        )
-      ]
-    });
+    if (shouldSendError(queue?.guild?.id, error)) {
+      safeSend(queue, {
+        embeds: [
+          buildErrorEmbed(
+            'Track Error',
+            `Failed to stream ${trackInfo}.\n\`\`\`${formatPlaybackError(error)}\`\`\`\nTry playing it again or use a different source.`
+          )
+        ]
+      });
+    }
 
     if (isDebug() && track) {
       const localYoutubeExtractor = player.extractors.get(LOCAL_YOUTUBE_EXTRACTOR_ID);
@@ -427,14 +445,17 @@ export async function initializePlayer(client, playerService) {
   player.events.on('error', (queue, error) => {
     dbgErr(queue, 'GuildQueue error event:', error);
     logger.error('Player error.', error);
-    safeSend(queue, {
-      embeds: [
-        buildErrorEmbed(
-          'Playback Error',
-          `Something went wrong during playback.\n\`\`\`${formatPlaybackError(error)}\`\`\``
-        )
-      ]
-    });
+
+    if (shouldSendError(queue?.guild?.id, error)) {
+      safeSend(queue, {
+        embeds: [
+          buildErrorEmbed(
+            'Playback Error',
+            `Something went wrong during playback.\n\`\`\`${formatPlaybackError(error)}\`\`\``
+          )
+        ]
+      });
+    }
   });
 
   player.extractors.on('error', (_context, extractor, error) => {
