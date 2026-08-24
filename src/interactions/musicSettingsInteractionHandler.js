@@ -18,9 +18,13 @@ async function requireQueue(interaction, resolveQueue = getQueue) {
   const queue = resolveQueue(interaction);
 
   if (!queue || !queue.currentTrack) {
-    await safeRespond(interaction, {
-      embeds: [buildErrorEmbed('No Active Session', 'Nothing is playing right now. Use `tree play` to start.')]
-    }, { ephemeral: true });
+    await safeRespond(
+      interaction,
+      {
+        embeds: [buildErrorEmbed('No Active Session', 'Nothing is playing right now. Use `tree play` to start.')]
+      },
+      { ephemeral: true }
+    );
     return null;
   }
 
@@ -56,10 +60,14 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
     return true;
   }
 
-  await safeRespond(interaction, {
-    embeds: [buildNeutralEmbed('⚙️ Playback Settings', buildPlaybackSettingsCopy(queue))],
-    components: buildSettingsComponents(queue)
-  }, { ephemeral: true });
+  await safeRespond(
+    interaction,
+    {
+      embeds: [buildNeutralEmbed('⚙️ Playback Settings', buildPlaybackSettingsCopy(queue))],
+      components: buildSettingsComponents(queue)
+    },
+    { ephemeral: true }
+  );
 
   return true;
 }

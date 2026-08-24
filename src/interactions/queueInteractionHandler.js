@@ -17,9 +17,13 @@ async function requireQueue(interaction, resolveQueue = getQueue) {
   const queue = resolveQueue(interaction);
 
   if (!queue || !queue.currentTrack) {
-    await safeRespond(interaction, {
-      embeds: [buildErrorEmbed('No Active Session', 'Nothing is playing right now. Use `tree play` to start.')]
-    }, { ephemeral: true });
+    await safeRespond(
+      interaction,
+      {
+        embeds: [buildErrorEmbed('No Active Session', 'Nothing is playing right now. Use `tree play` to start.')]
+      },
+      { ephemeral: true }
+    );
     return null;
   }
 
@@ -50,9 +54,13 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
       ? `Cleared **${clearedCount}** queued track${clearedCount === 1 ? '' : 's'}. The current track will finish playing.`
       : 'The queue was already empty. The current track will finish playing.';
 
-  await safeRespond(interaction, {
-    embeds: [buildSuccessEmbed('🗑️ Queue Cleared', details)]
-  }, { ephemeral: true });
+  await safeRespond(
+    interaction,
+    {
+      embeds: [buildSuccessEmbed('🗑️ Queue Cleared', details)]
+    },
+    { ephemeral: true }
+  );
 
   return true;
 }

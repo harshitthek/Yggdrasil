@@ -18,9 +18,13 @@ async function requireQueue(interaction, resolveQueue = getQueue, allowEmptyTrac
   const queue = resolveQueue(interaction);
 
   if (!queue || (!allowEmptyTrack && !queue.currentTrack)) {
-    await safeRespond(interaction, {
-      embeds: [buildErrorEmbed('No Active Session', 'Nothing is playing right now. Use `tree play` to start.')]
-    }, { ephemeral: true });
+    await safeRespond(
+      interaction,
+      {
+        embeds: [buildErrorEmbed('No Active Session', 'Nothing is playing right now. Use `tree play` to start.')]
+      },
+      { ephemeral: true }
+    );
     return null;
   }
 
@@ -50,16 +54,24 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
     if (!queue) return true;
 
     if (queue.node.isPaused()) {
-      await safeRespond(interaction, {
-        embeds: [buildNeutralEmbed('Already Paused', 'The music is already paused. Click **Resume** ▶️ to continue.')]
-      }, { ephemeral: true });
+      await safeRespond(
+        interaction,
+        {
+          embeds: [buildNeutralEmbed('Already Paused', 'The music is already paused. Click **Resume** ▶️ to continue.')]
+        },
+        { ephemeral: true }
+      );
       return true;
     }
 
     queue.node.setPaused(true);
-    await safeRespond(interaction, {
-      embeds: [buildSuccessEmbed('⏸️ Paused', 'Music has been paused.')]
-    }, { ephemeral: true });
+    await safeRespond(
+      interaction,
+      {
+        embeds: [buildSuccessEmbed('⏸️ Paused', 'Music has been paused.')]
+      },
+      { ephemeral: true }
+    );
     return true;
   }
 
@@ -68,16 +80,24 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
     if (!queue) return true;
 
     if (!queue.node.isPaused()) {
-      await safeRespond(interaction, {
-        embeds: [buildNeutralEmbed('Already Playing', 'The music is already playing!')]
-      }, { ephemeral: true });
+      await safeRespond(
+        interaction,
+        {
+          embeds: [buildNeutralEmbed('Already Playing', 'The music is already playing!')]
+        },
+        { ephemeral: true }
+      );
       return true;
     }
 
     queue.node.setPaused(false);
-    await safeRespond(interaction, {
-      embeds: [buildSuccessEmbed('▶️ Resumed', 'Music has been resumed.')]
-    }, { ephemeral: true });
+    await safeRespond(
+      interaction,
+      {
+        embeds: [buildSuccessEmbed('▶️ Resumed', 'Music has been resumed.')]
+      },
+      { ephemeral: true }
+    );
     return true;
   }
 
@@ -88,9 +108,13 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
     const skippedTitle = queue.currentTrack?.title || 'current track';
     queue.node.skip();
 
-    await safeRespond(interaction, {
-      embeds: [buildSuccessEmbed('⏭️ Skipped', `Skipped **${skippedTitle}**.`)]
-    }, { ephemeral: false });
+    await safeRespond(
+      interaction,
+      {
+        embeds: [buildSuccessEmbed('⏭️ Skipped', `Skipped **${skippedTitle}**.`)]
+      },
+      { ephemeral: false }
+    );
     return true;
   }
 
@@ -100,13 +124,21 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
 
     try {
       await queue.history.previous();
-      await safeRespond(interaction, {
-        embeds: [buildSuccessEmbed('⏮️ Previous', 'Playing the previous track.')]
-      }, { ephemeral: true });
+      await safeRespond(
+        interaction,
+        {
+          embeds: [buildSuccessEmbed('⏮️ Previous', 'Playing the previous track.')]
+        },
+        { ephemeral: true }
+      );
     } catch {
-      await safeRespond(interaction, {
-        embeds: [buildErrorEmbed('No Previous Track', 'There is no previous track in history.')]
-      }, { ephemeral: true });
+      await safeRespond(
+        interaction,
+        {
+          embeds: [buildErrorEmbed('No Previous Track', 'There is no previous track in history.')]
+        },
+        { ephemeral: true }
+      );
     }
 
     return true;
@@ -115,9 +147,13 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
   if (id === 'music_stop') {
     const queue = resolveQueue(interaction);
     if (!queue) {
-      await safeRespond(interaction, {
-        embeds: [buildErrorEmbed('No Active Session', 'Nothing is playing right now.')]
-      }, { ephemeral: true });
+      await safeRespond(
+        interaction,
+        {
+          embeds: [buildErrorEmbed('No Active Session', 'Nothing is playing right now.')]
+        },
+        { ephemeral: true }
+      );
       return true;
     }
 
@@ -131,21 +167,29 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
     if (is247) {
       queue.tracks.clear();
       queue.node.stop();
-      await safeRespond(interaction, {
-        embeds: [
-          buildSuccessEmbed(
-            '⏹️ Stopped',
-            'Stopped the music and cleared the queue. Staying in voice channel (24/7 mode is active). 🎵'
-          )
-        ]
-      }, { ephemeral: false });
+      await safeRespond(
+        interaction,
+        {
+          embeds: [
+            buildSuccessEmbed(
+              '⏹️ Stopped',
+              'Stopped the music and cleared the queue. Staying in voice channel (24/7 mode is active). 🎵'
+            )
+          ]
+        },
+        { ephemeral: false }
+      );
       return true;
     }
 
     queue.delete();
-    await safeRespond(interaction, {
-      embeds: [buildSuccessEmbed('⏹️ Stopped', 'Stopped the music and cleared the queue. See you next time! 👋')]
-    }, { ephemeral: false });
+    await safeRespond(
+      interaction,
+      {
+        embeds: [buildSuccessEmbed('⏹️ Stopped', 'Stopped the music and cleared the queue. See you next time! 👋')]
+      },
+      { ephemeral: false }
+    );
     return true;
   }
 
@@ -154,16 +198,24 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
     if (!queue) return true;
 
     if (queue.tracks.data.length === 0) {
-      await safeRespond(interaction, {
-        embeds: [buildErrorEmbed('Nothing to Shuffle', 'The queue is empty.')]
-      }, { ephemeral: true });
+      await safeRespond(
+        interaction,
+        {
+          embeds: [buildErrorEmbed('Nothing to Shuffle', 'The queue is empty.')]
+        },
+        { ephemeral: true }
+      );
       return true;
     }
 
     queue.tracks.shuffle();
-    await safeRespond(interaction, {
-      embeds: [buildSuccessEmbed('🔀 Shuffled', `Shuffled **${queue.tracks.data.length}** tracks!`)]
-    }, { ephemeral: true });
+    await safeRespond(
+      interaction,
+      {
+        embeds: [buildSuccessEmbed('🔀 Shuffled', `Shuffled **${queue.tracks.data.length}** tracks!`)]
+      },
+      { ephemeral: true }
+    );
     return true;
   }
 
@@ -171,10 +223,14 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
     const queue = await requireQueue(interaction, resolveQueue);
     if (!queue) return true;
 
-    await safeRespond(interaction, {
-      embeds: [buildQueueEmbed(queue)],
-      components: queue.tracks.data.length > 0 ? buildQueueComponents() : []
-    }, { ephemeral: true });
+    await safeRespond(
+      interaction,
+      {
+        embeds: [buildQueueEmbed(queue)],
+        components: queue.tracks.data.length > 0 ? buildQueueComponents() : []
+      },
+      { ephemeral: true }
+    );
     return true;
   }
 
@@ -185,9 +241,13 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
     const newVol = Math.min(100, (queue.node.volume ?? 80) + 10);
     queue.node.setVolume(newVol);
 
-    await safeRespond(interaction, {
-      embeds: [buildSuccessEmbed('🔊 Volume Up', `Volume set to **${buildVolumeLabel(newVol)}**`)]
-    }, { ephemeral: true });
+    await safeRespond(
+      interaction,
+      {
+        embeds: [buildSuccessEmbed('🔊 Volume Up', `Volume set to **${buildVolumeLabel(newVol)}**`)]
+      },
+      { ephemeral: true }
+    );
     return true;
   }
 
@@ -198,9 +258,13 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
     const newVol = Math.max(0, (queue.node.volume ?? 80) - 10);
     queue.node.setVolume(newVol);
 
-    await safeRespond(interaction, {
-      embeds: [buildSuccessEmbed('🔉 Volume Down', `Volume set to **${buildVolumeLabel(newVol)}**`)]
-    }, { ephemeral: true });
+    await safeRespond(
+      interaction,
+      {
+        embeds: [buildSuccessEmbed('🔉 Volume Down', `Volume set to **${buildVolumeLabel(newVol)}**`)]
+      },
+      { ephemeral: true }
+    );
     return true;
   }
 

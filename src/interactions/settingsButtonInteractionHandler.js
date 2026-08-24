@@ -52,9 +52,13 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
 
   const queue = requireQueue(interaction, resolveQueue);
   if (!queue) {
-    await safeRespond(interaction, {
-      embeds: [buildErrorEmbed('No Active Session', 'Nothing is playing right now. Use `tree play` to start.')]
-    }, { ephemeral: true });
+    await safeRespond(
+      interaction,
+      {
+        embeds: [buildErrorEmbed('No Active Session', 'Nothing is playing right now. Use `tree play` to start.')]
+      },
+      { ephemeral: true }
+    );
     return true;
   }
 
@@ -113,10 +117,14 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
 
   // ─── Open Filters Panel ─────────────────────────────────────────────────
   if (id === 'settings_filters') {
-    await safeRespond(interaction, {
-      embeds: [buildSuccessEmbed('🎛️ Audio Filters', 'Select a filter to toggle, or clear all active filters.')],
-      components: buildFilterComponents()
-    }, { ephemeral: true });
+    await safeRespond(
+      interaction,
+      {
+        embeds: [buildSuccessEmbed('🎛️ Audio Filters', 'Select a filter to toggle, or clear all active filters.')],
+        components: buildFilterComponents()
+      },
+      { ephemeral: true }
+    );
     return true;
   }
 
