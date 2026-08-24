@@ -83,6 +83,8 @@ jobs:
 
       - name: Rust Cargo Check
         run: cargo check --manifest-path native/worldtree-audio/Cargo.toml
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: '3.5'
 
   shellcheck:
     name: ShellCheck Linting
