@@ -342,8 +342,9 @@ export async function initializePlayer(client, playerService) {
   const lastErrorSent = new Map();
 
   function shouldSendError(guildId, error) {
-    const msg = error?.message || String(error);
-    if (/IP discovery|socket closed|aborted|ABORT_ERR|ECONNRESET|EPIPE|Networking error|VoiceConnection/i.test(msg)) {
+    const errorStr = `${error?.name ?? ''} ${error?.message ?? ''} ${error?.code ?? ''} ${String(error)}`;
+    // Suppress internal stream aborts, socket resets, UDP IP discovery, and connection transitions
+    if (/abort|discovery|socket|closed|connreset|epipe|network|voiceconnection|destroy/i.test(errorStr)) {
       return false;
     }
     const now = Date.now();

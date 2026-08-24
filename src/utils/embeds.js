@@ -112,7 +112,8 @@ export function buildNowPlayingEmbed(track, queue) {
 
   const source = getSourceBadge(track);
   const loopLabel = getLoopLabel(queue.repeatMode);
-  const nextTrack = queue.tracks.data[0];
+  const requesterId = track.requestedBy?.id || (typeof track.requestedBy === 'string' ? track.requestedBy : null);
+  const requesterMention = requesterId ? `<@${requesterId}>` : 'User';
 
   const description = [
     `### [${track.title}](${track.url})`,
@@ -120,17 +121,15 @@ export function buildNowPlayingEmbed(track, queue) {
     '',
     progress,
     '',
-    `${source} · 🔊 ${queue.node.volume ?? 80}% · 🔄 ${loopLabel}`
+    `${source} · 🔊 ${queue.node.volume ?? 80}% · 🔄 ${loopLabel}`,
+    '',
+    `👤 **Requested by:** ${requesterMention}`,
+    `⏱️ **Duration:** \`${track.duration}\` · 📜 **Queue:** \`${queue.tracks.data.length} track(s)\``
   ].join('\n');
 
   const embed = buildBaseEmbed({ color: COLORS.brand })
     .setAuthor({ name: '♫ Now Playing', iconURL: track.requestedBy?.displayAvatarURL?.() || undefined })
-    .setDescription(description)
-    .addFields(
-      { name: '👤 Requested by', value: `<@${track.requestedBy?.id || '0'}>`, inline: true },
-      { name: '⏱️ Duration', value: `\`${track.duration}\``, inline: true },
-      { name: '📜 Queue', value: `\`${queue.tracks.data.length} track(s)\``, inline: true }
-    );
+    .setDescription(description);
 
   if (nextTrack) {
     embed.addFields({
