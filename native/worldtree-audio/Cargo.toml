@@ -1,0 +1,30 @@
+[package]
+name = "worldtree-audio"
+version = "0.1.0"
+edition = "2021"
+authors = ["World Tree Team"]
+description = "High-performance SIMD native audio engine for World Tree Discord Bot"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { version = "2.16", default-features = false, features = ["napi4", "async", "tokio_rt"] }
+napi-derive = "2.16"
+symphonia = { version = "0.5", features = ["all"] }
+rubato = { version = "0.15", features = ["simd"] }
+audiopus_sys = "0.2"
+rtrb = "0.3"
+parking_lot = "0.12"
+thiserror = "1.0"
+crossbeam-channel = "0.5"
+lazy_static = "1.4"
+
+[build-dependencies]
+napi-build = "2.1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "unwind"

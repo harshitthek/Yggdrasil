@@ -139,6 +139,7 @@ export function readEnv(source = process.env, profile = 'runtime') {
     trustedAdminRoleIds: readCsv(source, 'TRUSTED_ADMIN_ROLE_IDS'),
     enableApi,
     useLocalYoutubeExtractor: cleanValue(source.USE_LOCAL_YOUTUBE_EXTRACTOR) === 'true',
+    audioEngine: cleanValue(source.AUDIO_ENGINE) || 'auto',
     apiPort: readPositiveInteger(source, 'API_PORT', 3000),
     rateLimit: {
       globalMax: readPositiveInteger(source, 'API_RATE_LIMIT_MAX', DEFAULT_API_RATE_LIMIT_MAX),

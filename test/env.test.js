@@ -25,6 +25,7 @@ test('readRuntimeEnv returns trimmed runtime configuration values', () => {
     trustedAdminRoleIds: [],
     enableApi: false,
     useLocalYoutubeExtractor: false,
+    audioEngine: 'auto',
     apiPort: 3000,
     rateLimit: {
       globalMax: 120,

@@ -18,6 +18,8 @@
     "format:check": "prettier --check \"src/**/*.{js,json,md}\" \"test/**/*.{js,json,md}\" \"scripts/**/*.{js,json,md}\" \"*.js\" \"*.json\" \"*.md\"",
     "lint": "eslint \"src/**/*.js\" \"test/**/*.js\" \"scripts/**/*.js\" \"*.js\"",
     "lint:fix": "eslint \"src/**/*.js\" \"test/**/*.js\" \"scripts/**/*.js\" \"*.js\" --fix",
+    "build:rust": "napi build --platform --cargo-cwd native/worldtree-audio",
+    "build:rust:release": "napi build --platform --release --cargo-cwd native/worldtree-audio",
     "ops:deploy": "bash ops/deploy.sh",
     "ops:update": "bash ops/update.sh",
     "ops:start": "bash ops/start.sh",
