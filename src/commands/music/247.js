@@ -20,6 +20,21 @@ async function execute247(voiceChannel, textChannel, playerService, settingsServ
     });
   }
 
+  const botMember = voiceChannel.guild?.members?.me;
+  if (botMember) {
+    const permissions = voiceChannel.permissionsFor(botMember);
+    if (permissions && (!permissions.has('ViewChannel') || !permissions.has('Connect'))) {
+      return respond({
+        embeds: [buildErrorEmbed('Permission Denied', 'I do not have permission to view or join that voice channel.')]
+      });
+    }
+    if (permissions && !permissions.has('Speak')) {
+      return respond({
+        embeds: [buildErrorEmbed('Permission Denied', 'I do not have permission to speak in that voice channel.')]
+      });
+    }
+  }
+
   const musicPlayer = playerService?.getPlayer();
 
   if (!musicPlayer) {

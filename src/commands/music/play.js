@@ -81,6 +81,31 @@ export async function executePlay(query, voiceChannel, user, textChannel, player
     });
   }
 
+  const botMember = voiceChannel.guild?.members?.me;
+  if (botMember) {
+    const permissions = voiceChannel.permissionsFor(botMember);
+    if (permissions && (!permissions.has('ViewChannel') || !permissions.has('Connect'))) {
+      return respond({
+        embeds: [buildErrorEmbed('Permission Denied', 'I do not have permission to view or join that voice channel.')]
+      });
+    }
+    if (permissions && !permissions.has('Speak')) {
+      return respond({
+        embeds: [buildErrorEmbed('Permission Denied', 'I do not have permission to speak in that voice channel.')]
+      });
+    }
+    if (
+      voiceChannel.userLimit > 0 &&
+      voiceChannel.members?.size >= voiceChannel.userLimit &&
+      !permissions?.has('MoveMembers') &&
+      !voiceChannel.members?.has(botMember.id)
+    ) {
+      return respond({
+        embeds: [buildErrorEmbed('Channel Full', 'That voice channel is full and has reached its user limit.')]
+      });
+    }
+  }
+
   const searchEngine = resolveMusicSearchEngine(query, options);
   const musicPlayer = playerService?.getPlayer();
 

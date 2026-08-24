@@ -139,14 +139,14 @@ export async function handleSearchSelect(interaction, { cache = searchCache, pla
   if (!cached) {
     return interaction.followUp({
       embeds: [buildErrorEmbed('Search Expired', 'This search has expired. Please run `tree search` again.')],
-      flags: 64
+      ephemeral: true
     });
   }
 
   if (cached.userId !== interaction.user.id) {
     return interaction.followUp({
       embeds: [buildErrorEmbed('Not Your Search', 'Only the person who searched can pick a result.')],
-      flags: 64
+      ephemeral: true
     });
   }
 
@@ -156,23 +156,27 @@ export async function handleSearchSelect(interaction, { cache = searchCache, pla
   if (!track) {
     return interaction.followUp({
       embeds: [buildErrorEmbed('Invalid Selection', 'Could not find that track. Please try again.')],
-      flags: 64
+      ephemeral: true
     });
   }
 
   cache.delete(cacheKey);
 
+  const voiceChannel = interaction.member?.voice?.channel || cached.voiceChannel;
+
   // Play the selected track using its URL for exact match
-  await play(
-    track.url,
-    interaction.member?.voice?.channel,
-    interaction.user,
-    cached.textChannel,
-    cached.playerService,
-    async (payload) => {
-      await interaction.followUp(payload);
-    }
-  );
+  try {
+    await play(track.url, voiceChannel, interaction.user, cached.textChannel, cached.playerService, async (payload) => {
+      await interaction.followUp(payload).catch(() => null);
+    });
+  } catch (err) {
+    await interaction
+      .followUp({
+        embeds: [buildErrorEmbed('Playback Error', 'Failed to play the selected song.')],
+        ephemeral: true
+      })
+      .catch(() => null);
+  }
 }
 
 export async function execute(interaction) {

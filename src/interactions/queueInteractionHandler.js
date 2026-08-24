@@ -46,8 +46,10 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
     return true;
   }
 
-  const clearedCount = queue.tracks.data.length;
-  queue.tracks.clear();
+  const clearedCount = queue.tracks?.data?.length ?? queue.tracks?.size ?? 0;
+  try {
+    queue.tracks.clear();
+  } catch {}
 
   const details =
     clearedCount > 0

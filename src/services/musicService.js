@@ -443,11 +443,12 @@ export async function initializePlayer(client, playerService) {
     // Only notify if something is already playing (playerStart handles the first track)
     if (queue.isPlaying()) {
       const emoji = getSourceEmoji(track);
+      const position = queue.tracks?.data?.length ?? queue.tracks?.size ?? 1;
       safeSend(queue, {
         embeds: [
           buildSuccessEmbed(
             `${emoji} Track Queued`,
-            `**[${track.title}](${track.url})**\nby **${track.author}** · \`${track.duration}\`\n\n📍 Position in queue: **#${queue.tracks.data.length}**`
+            `**[${track.title}](${track.url})**\nby **${track.author}** · \`${track.duration}\`\n\n📍 Position in queue: **#${position}**`
           )
         ]
       });

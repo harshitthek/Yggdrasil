@@ -18,16 +18,29 @@ async function executeShuffle(guildId, playerService, respond) {
     });
   }
 
-  if (queue.tracks.data.length === 0) {
+  const upcomingCount = queue.tracks?.data?.length ?? queue.tracks?.size ?? 0;
+
+  if (upcomingCount === 0) {
     return respond({
       embeds: [buildErrorEmbed('Nothing to Shuffle', 'There are no upcoming tracks to shuffle.')]
     });
   }
 
-  queue.tracks.shuffle();
+  try {
+    queue.tracks.shuffle();
+  } catch (err) {
+    return respond({
+      embeds: [buildErrorEmbed('Shuffle Failed', 'Could not shuffle the queue at this time.')]
+    });
+  }
 
   return respond({
-    embeds: [buildSuccessEmbed('🔀 Queue Shuffled', `Shuffled **${queue.tracks.data.length}** upcoming tracks.`)]
+    embeds: [
+      buildSuccessEmbed(
+        '🔀 Queue Shuffled',
+        `Shuffled **${upcomingCount}** upcoming track${upcomingCount === 1 ? '' : 's'}.`
+      )
+    ]
   });
 }
 

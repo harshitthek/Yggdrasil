@@ -197,7 +197,9 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
     const queue = await requireQueue(interaction, resolveQueue);
     if (!queue) return true;
 
-    if (queue.tracks.data.length === 0) {
+    const count = queue.tracks?.data?.length ?? queue.tracks?.size ?? 0;
+
+    if (count === 0) {
       await safeRespond(
         interaction,
         {
@@ -208,11 +210,14 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
       return true;
     }
 
-    queue.tracks.shuffle();
+    try {
+      queue.tracks.shuffle();
+    } catch {}
+
     await safeRespond(
       interaction,
       {
-        embeds: [buildSuccessEmbed('🔀 Shuffled', `Shuffled **${queue.tracks.data.length}** tracks!`)]
+        embeds: [buildSuccessEmbed('🔀 Shuffled', `Shuffled **${count}** tracks!`)]
       },
       { ephemeral: true }
     );
@@ -223,11 +228,13 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
     const queue = await requireQueue(interaction, resolveQueue);
     if (!queue) return true;
 
+    const count = queue.tracks?.data?.length ?? queue.tracks?.size ?? 0;
+
     await safeRespond(
       interaction,
       {
         embeds: [buildQueueEmbed(queue)],
-        components: queue.tracks.data.length > 0 ? buildQueueComponents() : []
+        components: count > 0 ? buildQueueComponents() : []
       },
       { ephemeral: true }
     );

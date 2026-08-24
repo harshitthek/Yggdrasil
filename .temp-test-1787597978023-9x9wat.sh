@@ -1,0 +1,1 @@
+bash ops/switch.sh pm2

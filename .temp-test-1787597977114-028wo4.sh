@@ -1,0 +1,1 @@
+source ops/lib/config.sh && echo $OPS_PROVIDER

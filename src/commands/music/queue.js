@@ -18,9 +18,11 @@ async function executeQueue(guildId, playerService, respond) {
     });
   }
 
+  const trackCount = queue.tracks?.data?.length ?? queue.tracks?.size ?? 0;
+
   return respond({
     embeds: [buildQueueEmbed(queue)],
-    components: queue.tracks.data.length > 0 ? buildQueueComponents() : []
+    components: trackCount > 0 ? buildQueueComponents() : []
   });
 }
 
