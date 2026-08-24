@@ -153,7 +153,7 @@ export async function executeRecord({ action, durationStr, voiceChannel, user, t
     }
   }
 
-  // Ensure bot is in voice channel
+  // Ensure bot is in voice channel and undeafened
   const playerService = appContext?.playerService;
   const player = playerService?.getPlayer();
   let queue = playerService?.getGuildQueue(guildId);
@@ -169,9 +169,11 @@ export async function executeRecord({ action, durationStr, voiceChannel, user, t
     });
   }
 
+  let voiceConn = queue?.dispatcher?.voiceConnection || queue?.connection;
   if (queue && !queue.connection) {
     try {
       await queue.connect(voiceChannel, { ...VOICE_CONNECTION_OPTIONS, selfDeaf: false });
+      voiceConn = queue.dispatcher?.voiceConnection || queue.connection;
     } catch {
       return respond({
         embeds: [buildErrorEmbed('Connection Failed', 'Could not join voice channel.')]
@@ -179,13 +181,21 @@ export async function executeRecord({ action, durationStr, voiceChannel, user, t
     }
   }
 
+  // Undeafen the bot member in the guild
+  try {
+    if (guild.members.me?.voice?.channel) {
+      await guild.members.me.voice.setDeaf(false).catch(() => {});
+    }
+  } catch {}
+
   try {
     await recordingService.startRecording({
       guild,
       voiceChannel,
       owner: user,
       textChannel,
-      durationMs
+      durationMs,
+      voiceConnection: voiceConn
     });
 
     const durationDisplay = ms(durationMs, { long: true });

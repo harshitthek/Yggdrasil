@@ -11,7 +11,7 @@ export const data = new SlashCommandBuilder()
   .setName('stop')
   .setDescription('Stop the music, clear the queue, and disconnect.');
 
-async function executeStop(guildId, playerService, respond) {
+async function executeStop(guildId, playerService, settingsService, respond) {
   const queue = playerService?.getGuildQueue(guildId);
 
   if (!queue) {
@@ -20,22 +20,37 @@ async function executeStop(guildId, playerService, respond) {
     });
   }
 
-  const was247 = queue.metadata?.is247 ?? false;
+  let is247 = queue.metadata?.is247;
+  if (is247 === undefined && settingsService) {
+    const settings = await settingsService.getSettings(guildId).catch(() => null);
+    is247 = Boolean(settings?.twentyFourSeven?.enabled);
+  }
+  is247 = Boolean(is247);
+
+  if (is247) {
+    queue.tracks.clear();
+    queue.node.stop();
+    return respond({
+      embeds: [
+        buildSuccessEmbed(
+          '⏹️ Stopped',
+          'Stopped the music and cleared the queue. Staying in voice channel (24/7 mode is active). 🎵'
+        )
+      ]
+    });
+  }
+
   queue.delete();
-
-  const description = was247
-    ? 'Stopped the music, cleared the queue, and **disabled 24/7 mode**. 👋'
-    : 'Stopped the music and cleared the queue. See you next time! 👋';
-
   return respond({
-    embeds: [buildSuccessEmbed('⏹️ Stopped', description)]
+    embeds: [buildSuccessEmbed('⏹️ Stopped', 'Stopped the music and cleared the queue. See you next time! 👋')]
   });
 }
 
 export async function execute(interaction) {
   const appContext = getAppContext(interaction) ?? {};
   const playerService = appContext.playerService ?? null;
-  await executeStop(interaction.guild.id, playerService, async (payload) => {
+  const settingsService = appContext.settingsService ?? null;
+  await executeStop(interaction.guild.id, playerService, settingsService, async (payload) => {
     if (interaction.replied || interaction.deferred) {
       await interaction.followUp(payload);
     } else {
@@ -46,7 +61,8 @@ export async function execute(interaction) {
 
 export async function executeMessage(context) {
   const playerService = context.appContext?.playerService ?? null;
-  await executeStop(context.guild.id, playerService, async (payload) => {
+  const settingsService = context.appContext?.settingsService ?? null;
+  await executeStop(context.guild.id, playerService, settingsService, async (payload) => {
     await context.respond(payload);
   });
 }

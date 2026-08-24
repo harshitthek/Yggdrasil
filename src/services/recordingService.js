@@ -1,7 +1,7 @@
 import { createWriteStream, existsSync, mkdirSync, unlinkSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
-import { getVoiceConnection, EndBehaviorType } from '@discordjs/voice';
+import { getVoiceConnection, joinVoiceChannel, EndBehaviorType } from '@discordjs/voice';
 import prism from 'prism-media';
 import ffmpegStatic from 'ffmpeg-static';
 import { AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
@@ -39,24 +39,34 @@ class RecordingService {
   /**
    * Starts voice channel audio recording.
    */
-  async startRecording({ guild, voiceChannel, owner, textChannel, durationMs = 3600000 }) {
+  async startRecording({ guild, voiceChannel, owner, textChannel, durationMs = 3600000, voiceConnection }) {
     const guildId = guild.id;
     if (this.activeRecordings.has(guildId)) {
       throw new Error('A voice recording is already active in this server.');
     }
 
-    const connection = getVoiceConnection(guildId);
-    if (!connection) {
-      throw new Error('The bot is not connected to a voice channel in this server.');
-    }
-
-    // Undeafen the bot so it can receive audio packets
+    // Undeafen the bot first so Discord sends audio packets
     try {
       const me = guild.members.me;
       if (me?.voice?.channel) {
         await me.voice.setDeaf(false).catch(() => {});
       }
     } catch {}
+
+    let connection = voiceConnection || getVoiceConnection(guildId);
+    if (!connection && voiceChannel) {
+      connection = joinVoiceChannel({
+        channelId: voiceChannel.id,
+        guildId: guild.id,
+        adapterCreator: guild.voiceAdapterCreator,
+        selfDeaf: false,
+        selfMute: false
+      });
+    }
+
+    if (!connection || !connection.receiver) {
+      throw new Error('The bot is not connected to a voice channel in this server.');
+    }
 
     const timestamp = Date.now();
     const pcmPath = join(RECORDINGS_DIR, `rec_${guildId}_${timestamp}.pcm`);
