@@ -131,6 +131,7 @@ export function buildNowPlayingEmbed(track, queue) {
     .setAuthor({ name: '♫ Now Playing', iconURL: track.requestedBy?.displayAvatarURL?.() || undefined })
     .setDescription(description);
 
+  const nextTrack = queue.tracks?.data?.[0];
   if (nextTrack) {
     embed.addFields({
       name: '⏭️ Up Next',
