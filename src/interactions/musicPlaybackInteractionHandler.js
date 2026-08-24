@@ -165,8 +165,12 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
     is247 = Boolean(is247);
 
     if (is247) {
-      queue.tracks.clear();
-      queue.node.stop();
+      queue.options.leaveOnEnd = false;
+      queue.options.leaveOnEmpty = false;
+      try {
+        queue.tracks.clear();
+        queue.node.stop();
+      } catch {}
       await safeRespond(
         interaction,
         {
@@ -182,7 +186,9 @@ export async function handle(interaction, { resolveQueue = getQueue } = {}) {
       return true;
     }
 
-    queue.delete();
+    try {
+      queue.delete();
+    } catch {}
     await safeRespond(
       interaction,
       {

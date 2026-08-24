@@ -233,6 +233,82 @@ test('reconnect247Guilds reconnects to voice channels from database settings', a
   assert.equal(connectedChannel?.id, 'voice-123');
 });
 
+test('stop command does not delete queue and disables leaveOnEnd in 24/7 mode', async () => {
+  const { executeMessage: executeStop } = await import('../src/commands/music/stop.js');
+  let deleted = false;
+  let stopped = false;
+  const mockQueue = {
+    metadata: { is247: true },
+    options: { leaveOnEnd: true, leaveOnEmpty: true },
+    tracks: { clear: () => {} },
+    node: {
+      stop: () => {
+        stopped = true;
+      }
+    },
+    delete: () => {
+      deleted = true;
+    }
+  };
+
+  let response;
+  await executeStop({
+    guild: { id: 'guild-1' },
+    appContext: {
+      playerService: {
+        getGuildQueue: () => mockQueue
+      }
+    },
+    respond: async (payload) => {
+      response = payload;
+    }
+  });
+
+  assert.equal(stopped, true);
+  assert.equal(deleted, false);
+  assert.equal(mockQueue.options.leaveOnEnd, false);
+  assert.equal(mockQueue.options.leaveOnEmpty, false);
+  assert.match(response.embeds[0].data.title, /Stopped/);
+  assert.match(response.embeds[0].data.description, /24\/7 mode is active/);
+});
+
+test('leave command disconnects and disables 24/7 mode in database', async () => {
+  const { executeMessage: executeLeave } = await import('../src/commands/music/leave.js');
+  let updated247 = null;
+  let deleted = false;
+  const mockQueue = {
+    metadata: { is247: true },
+    delete: () => {
+      deleted = true;
+    }
+  };
+
+  let response;
+  await executeLeave({
+    guild: { id: 'guild-1', members: { me: { voice: { channelId: 'voice-123' } } } },
+    member: { voice: { channel: { id: 'voice-123' } } },
+    appContext: {
+      playerService: {
+        getGuildQueue: () => mockQueue
+      },
+      settingsService: {
+        getSettings: async () => ({ twentyFourSeven: { enabled: true } }),
+        set247: async (_guildId, options) => {
+          updated247 = options;
+        }
+      }
+    },
+    respond: async (payload) => {
+      response = payload;
+    }
+  });
+
+  assert.equal(deleted, true);
+  assert.equal(updated247?.enabled, false);
+  assert.match(response.embeds[0].data.title, /Left Voice Channel/);
+  assert.match(response.embeds[0].data.description, /disabled 24\/7 mode/);
+});
+
 test('start247Watchdog and stop247Watchdog manage timer cleanly', async () => {
   const { start247Watchdog, stop247Watchdog } = await import('../src/services/musicService.js');
 

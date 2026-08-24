@@ -3,13 +3,13 @@ import { getAppContext } from '../../context/appContext.js';
 import { buildErrorEmbed, buildSuccessEmbed } from '../../utils/embeds.js';
 
 export const name = 'stop';
-export const aliases = ['dc', 'disconnect', 'leave'];
+export const aliases = ['halt'];
 export const allowNoPrefix = true;
 export const requiresSameVoiceChannel = true;
 
 export const data = new SlashCommandBuilder()
   .setName('stop')
-  .setDescription('Stop the music, clear the queue, and disconnect.');
+  .setDescription('Stop the music and clear the queue (stays in VC if 24/7 mode is on).');
 
 async function executeStop(guildId, playerService, settingsService, respond) {
   const queue = playerService?.getGuildQueue(guildId);
@@ -28,8 +28,12 @@ async function executeStop(guildId, playerService, settingsService, respond) {
   is247 = Boolean(is247);
 
   if (is247) {
-    queue.tracks.clear();
-    queue.node.stop();
+    queue.options.leaveOnEnd = false;
+    queue.options.leaveOnEmpty = false;
+    try {
+      queue.tracks.clear();
+      queue.node.stop();
+    } catch {}
     return respond({
       embeds: [
         buildSuccessEmbed(
@@ -40,7 +44,9 @@ async function executeStop(guildId, playerService, settingsService, respond) {
     });
   }
 
-  queue.delete();
+  try {
+    queue.delete();
+  } catch {}
   return respond({
     embeds: [buildSuccessEmbed('⏹️ Stopped', 'Stopped the music and cleared the queue. See you next time! 👋')]
   });

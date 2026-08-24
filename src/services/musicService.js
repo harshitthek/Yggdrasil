@@ -510,6 +510,11 @@ export async function initializePlayer(client, playerService) {
   logger.info('Music player initialized successfully.');
 }
 
+// ─── 24/7 Watchdog State & Circuit Breakers ────────────────────────────────
+const reconnectFailures = new Map(); // guildId -> { count, nextRetryTime }
+const MAX_CONSECUTIVE_FAILURES = 5;
+const CIRCUIT_BREAKER_BACKOFF_MS = 5 * 60 * 1000; // 5 minutes backoff after 5 failures
+
 /**
  * Reconnects 24/7 enabled voice channels across all guilds on bot startup or watchdog tick.
  *
@@ -528,13 +533,21 @@ export async function reconnect247Guilds(client, appContext, { quiet = false } =
     const records = await settingsService.getAll247Guilds();
     if (!Array.isArray(records) || records.length === 0) return;
 
-    for (const record of records) {
-      try {
-        const guildId = record.guildId;
-        const voiceChannelId = record.twentyFourSeven?.voiceChannelId;
-        const textChannelId = record.twentyFourSeven?.textChannelId;
-        if (!guildId || !voiceChannelId) continue;
+    const now = Date.now();
 
+    for (const record of records) {
+      const guildId = record.guildId;
+      const voiceChannelId = record.twentyFourSeven?.voiceChannelId;
+      const textChannelId = record.twentyFourSeven?.textChannelId;
+      if (!guildId || !voiceChannelId) continue;
+
+      // Circuit-breaker check: back off if too many consecutive failures
+      const failureState = reconnectFailures.get(guildId);
+      if (failureState && failureState.count >= MAX_CONSECUTIVE_FAILURES && now < failureState.nextRetryTime) {
+        continue;
+      }
+
+      try {
         const guild =
           client.guilds?.cache?.get(guildId) ??
           (typeof client.guilds?.fetch === 'function' ? await client.guilds.fetch(guildId).catch(() => null) : null);
@@ -545,14 +558,54 @@ export async function reconnect247Guilds(client, appContext, { quiet = false } =
           (typeof guild.channels?.fetch === 'function'
             ? await guild.channels.fetch(voiceChannelId).catch(() => null)
             : null);
-        if (!voiceChannel || (typeof voiceChannel.isVoiceBased === 'function' && !voiceChannel.isVoiceBased()))
+
+        // Case 1: Target voice channel was deleted or converted to non-voice
+        if (!voiceChannel || (typeof voiceChannel.isVoiceBased === 'function' && !voiceChannel.isVoiceBased())) {
+          logger.warn(
+            `[24/7 Watchdog] Target voice channel ${voiceChannelId} was deleted or invalid in "${guild.name}". Disabling 24/7 mode.`
+          );
+          await settingsService
+            .set247(guildId, {
+              enabled: false,
+              voiceChannelId: null,
+              textChannelId: null
+            })
+            .catch(() => null);
+          reconnectFailures.delete(guildId);
           continue;
+        }
+
+        // Case 2: Bot permissions check
+        const botMember = guild.members?.me ?? (await guild.members.fetchMe?.().catch(() => null));
+        if (botMember) {
+          const permissions = voiceChannel.permissionsFor(botMember);
+          if (permissions && (!permissions.has('ViewChannel') || !permissions.has('Connect'))) {
+            logger.warn(
+              `[24/7 Watchdog] Missing ViewChannel/Connect permission in "${voiceChannel.name}" (${guild.name}). Skipping.`
+            );
+            continue;
+          }
+
+          // Case 3: Channel capacity check (user limit exceeded)
+          if (
+            voiceChannel.userLimit > 0 &&
+            voiceChannel.members?.size >= voiceChannel.userLimit &&
+            !permissions?.has('MoveMembers') &&
+            !voiceChannel.members?.has(botMember.id)
+          ) {
+            logger.warn(
+              `[24/7 Watchdog] Channel "${voiceChannel.name}" is full in "${guild.name}". Backing off until space opens.`
+            );
+            continue;
+          }
+        }
 
         const currentBotVoiceId = guild.members?.me?.voice?.channelId;
         let queue = player.nodes.get(guildId);
 
-        // If already connected properly in the target voice channel with an active queue, do nothing
+        // If already connected properly in the target voice channel with an active connection, do nothing
         if (currentBotVoiceId === voiceChannelId && queue?.connection) {
+          reconnectFailures.delete(guildId);
           continue;
         }
 
@@ -581,6 +634,7 @@ export async function reconnect247Guilds(client, appContext, { quiet = false } =
 
         if (!queue.connection || currentBotVoiceId !== voiceChannelId) {
           await queue.connect(voiceChannel, VOICE_CONNECTION_OPTIONS);
+          reconnectFailures.delete(guildId);
           if (!quiet) {
             logger.info(`[24/7] Restored voice connection to "${voiceChannel.name}" in guild "${guild.name}".`);
           } else {
@@ -588,7 +642,14 @@ export async function reconnect247Guilds(client, appContext, { quiet = false } =
           }
         }
       } catch (err) {
-        logger.warn(`[24/7] Failed to reconnect to guild ${record.guildId}:`, err);
+        const prevCount = reconnectFailures.get(guildId)?.count ?? 0;
+        const nextCount = prevCount + 1;
+        const nextRetry = nextCount >= MAX_CONSECUTIVE_FAILURES ? now + CIRCUIT_BREAKER_BACKOFF_MS : now;
+        reconnectFailures.set(guildId, { count: nextCount, nextRetryTime: nextRetry });
+        logger.warn(
+          `[24/7] Failed to reconnect to guild ${record.guildId} (attempt ${nextCount}/${MAX_CONSECUTIVE_FAILURES}):`,
+          err
+        );
       }
     }
   } catch (error) {
