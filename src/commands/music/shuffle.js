@@ -28,7 +28,7 @@ async function executeShuffle(guildId, playerService, respond) {
 
   try {
     queue.tracks.shuffle();
-  } catch (err) {
+  } catch {
     return respond({
       embeds: [buildErrorEmbed('Shuffle Failed', 'Could not shuffle the queue at this time.')]
     });

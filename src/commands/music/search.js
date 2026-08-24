@@ -169,7 +169,7 @@ export async function handleSearchSelect(interaction, { cache = searchCache, pla
     await play(track.url, voiceChannel, interaction.user, cached.textChannel, cached.playerService, async (payload) => {
       await interaction.followUp(payload).catch(() => null);
     });
-  } catch (err) {
+  } catch {
     await interaction
       .followUp({
         embeds: [buildErrorEmbed('Playback Error', 'Failed to play the selected song.')],
