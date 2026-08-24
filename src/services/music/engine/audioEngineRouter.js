@@ -1,7 +1,5 @@
 import { AudioEngineType, AudioEngineStatus } from './engineTypes.js';
-import { isRustEngineAvailable, RustAudioSession } from './rustAudioEngine.js';
-import { JsAudioEngine } from './jsAudioEngine.js';
-import { logger } from '../../../utils/logger.js';
+import { isRustEngineAvailable } from './rustAudioEngine.js';
 
 // Guild-specific engine overrides
 const guildEngineOverrides = new Map();

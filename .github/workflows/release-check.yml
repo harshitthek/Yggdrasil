@@ -4,9 +4,15 @@ on:
   push:
     branches: ['master', 'main']
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   verify:
+    name: Full Release Verification
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     strategy:
       matrix:
@@ -25,8 +31,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
         env:
-          # Tests do not execute the optional yt-dlp binary. Avoid its
-          # unauthenticated GitHub release download during dependency install.
           YOUTUBE_DL_SKIP_DOWNLOAD: 'true'
 
       - name: Check Formatting
@@ -44,9 +48,36 @@ jobs:
       - name: Run Operations Doctor (Dry Run)
         run: bash ops/doctor.sh --dry-run
 
+  rust-verify:
+    name: Rust Engine Release Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust Toolchain (Stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            native/worldtree-audio/target/
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('native/worldtree-audio/Cargo.lock', 'native/worldtree-audio/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-release-
+
+      - name: Verify Rust Native Crate
+        run: cargo check --manifest-path native/worldtree-audio/Cargo.toml --release
+
   shellcheck:
     name: ShellCheck
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 

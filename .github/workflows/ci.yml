@@ -3,20 +3,30 @@ name: Continuous Integration
 on:
   pull_request:
     branches: ['master', 'main']
+  push:
+    branches: ['master', 'main']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  node-test:
+    name: Node.js Test Suite (${{ matrix.node-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
 
     strategy:
+      fail-fast: false
       matrix:
-        node-version: [22.x]
+        os: [ubuntu-latest]
+        node-version: [20.x, 22.x]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Use Node.js ${{ matrix.node-version }}
+      - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
@@ -25,24 +35,62 @@ jobs:
       - name: Install dependencies
         run: npm ci
         env:
-          # Tests do not execute the optional yt-dlp binary. Avoid its
-          # unauthenticated GitHub release download during dependency install.
           YOUTUBE_DL_SKIP_DOWNLOAD: 'true'
 
-      - name: Check Formatting
+      - name: Check Code Formatting
         run: npm run format:check
 
-      - name: Lint Code
+      - name: Run ESLint
         run: npm run lint
 
-      - name: Run Tests
+      - name: Execute Node.js Unit Tests
         run: npm test
 
-  shellcheck:
-    name: ShellCheck
-    runs-on: ubuntu-latest
+      - name: Verify Operations Scripts (Dry Run)
+        run: npm run ops:verify -- --dry-run
+
+  rust-check:
+    name: Rust Native Engine (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust Toolchain (Stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache Rust Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            native/worldtree-audio/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('native/worldtree-audio/Cargo.lock', 'native/worldtree-audio/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Rust Cargo Check
+        run: cargo check --manifest-path native/worldtree-audio/Cargo.toml
+
+  shellcheck:
+    name: ShellCheck Linting
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Run ShellCheck
         uses: ludeeus/action-shellcheck@2.0.0

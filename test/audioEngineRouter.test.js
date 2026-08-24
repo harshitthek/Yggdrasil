@@ -6,11 +6,7 @@ import {
   setGuildEngineOverride,
   getAudioEngineDiagnostics
 } from '../src/services/music/engine/audioEngineRouter.js';
-import {
-  isRustEngineAvailable,
-  RustAudioSession,
-  getNativeAudioBinding
-} from '../src/services/music/engine/rustAudioEngine.js';
+import { isRustEngineAvailable, RustAudioSession } from '../src/services/music/engine/rustAudioEngine.js';
 import { JsAudioEngine } from '../src/services/music/engine/jsAudioEngine.js';
 import { AudioEngineType, AudioEngineStatus } from '../src/services/music/engine/engineTypes.js';
 import { execute as executeEngineSlash, executeMessage as executeEngineMessage } from '../src/commands/music/engine.js';
