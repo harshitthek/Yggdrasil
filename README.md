@@ -162,12 +162,14 @@ world-tree/
 │   │       ├── uptime.js               # Bot uptime display
 │   │       ├── membercount.js          # Quick member count
 │   │       ├── stats.js                # Moderation case statistics summary
+│   │       ├── record.js               # Private voice recording with auto-encoding & DM delivery
 │   │       └── dashboard.js            # Dashboard status and URL display
 │   │
 │   ├── services/                         # ── Business Logic ────────────────────────────────
 │   │   ├── moderationService.js          # Permission checks, hierarchy validation, case lifecycle
 │   │   ├── settingsService.js            # Guild settings with in-memory TTL cache + normalization
 │   │   ├── activityRoleService.js        # Presence/voice activity role assignment
+│   │   ├── recordingService.js           # Multi-track PCM voice receiver, FFmpeg MP3 encoder, DM delivery pipeline
 │   │   ├── musicService.js               # discord-player init, extractor pipeline, event wiring
 │   │   ├── musicChannelService.js         # Dedicated music-channel auto-play routing
 │   │   ├── playerService.js              # Music player factory — createPlayerService() returns closure-scoped {setPlayer, getPlayer, getGuildQueue}
@@ -220,6 +222,7 @@ world-tree/
 │   │   ├── musicFilterInteractionHandler.js   # Filter panel actions and filter toggles
 │   │   ├── queueInteractionHandler.js    # Queue clear button handling
 │   │   ├── searchInteractionHandler.js   # Search result select handling
+│   │   ├── recordingInteractionHandler.js # Recording stop/status interaction handling
 │   │   ├── musicSettingsInteractionHandler.js # Playback settings panel handling
 │   │   └── settingsButtonInteractionHandler.js # Guild settings dashboard navigation buttons
 │   │
@@ -252,7 +255,7 @@ world-tree/
 │       ├── moderationInputs.js           # Shared moderation command input extraction
 │       └── fileDiscovery.js              # Recursive .js file finder for loaders
 │
-├── test/                                 # ── 48 Test Files ──────────────────────────────────
+├── test/                                 # ── 65 Test Files (384 Passing Tests) ─────────────
 │   ├── activityRoleCommand.test.js       # Prefix command routing for activity roles
 │   ├── activityRoleService.test.js       # Presence/voice role assignment behavior
 │   ├── apiRoutes.test.js                 # Route serialization, pagination, field stripping
@@ -293,6 +296,9 @@ world-tree/
 │   ├── playerService.test.js             # Music player factory closure behavior
 │   ├── pm2Config.test.js                 # PM2 process config validation
 │   ├── queryOptions.test.js              # Upsert option configuration
+│   ├── recordingCommand.test.js          # Voice recording command authorization & lifecycle
+│   ├── recordingInteractionHandler.test.js # Recording component interaction routing
+│   ├── recordingService.test.js          # Voice connection retention, PCM mixing & MP3 delivery
 │   ├── registry.test.js                  # Interaction handler registry contract
 │   ├── responses.test.js                 # Reply/followUp/edit interaction abstraction
 │   ├── sessionPlugin.test.js             # Crypto roundtrip, tamper detection, expiry, cookie attrs
@@ -304,7 +310,10 @@ world-tree/
 │
 ├── scripts/
 │   ├── registerCommands.js               # Guild-scoped slash command deployment
-│   └── migrate.js                        # Standalone migration CLI runner
+│   ├── migrate.js                        # Standalone migration CLI runner
+│   ├── setup.js                          # Interactive project setup wizard
+│   ├── smokeRunner.js                    # End-to-end smoke testing harness across all subsystems
+│   └── mutationRunner.js                 # AST/regex fault-injection mutation testing runner
 │
 ├── dashboard/                            # ── Future Dashboard Contracts ────────────────────
 │   ├── contracts/
@@ -650,6 +659,21 @@ Operational requirements:
 - Voice roles require `GuildVoiceStates`, which is enabled in the bot client config.
 - Discord server owners can receive activity roles, but bot accounts are ignored.
 
+### Voice Recording Subsystem (`/record`)
+
+Private, non-disruptive voice recording pipeline designed for bot owners and Discord application team members.
+
+- **Non-Disruptive 24/7 Standby Integration**: Cleanly attaches to existing voice channels without disconnecting or resetting voice gateway states. In 24/7 standby voice channels, the connection is preserved upon stopping, redeafening the bot (`setDeaf(true)`) without triggering 24/7 disconnect churn or reconnect chimes.
+- **Audio Capture & Multi-Stream Mixing**: Connects directly via `@discordjs/voice`, subscribes to speaking users, transmits UDP warm-up frames to ensure bidirectional routing, and streams raw 48kHz 16-bit stereo PCM.
+- **FFmpeg In-Memory MP3 Encoding**: Spawns FFmpeg locally to convert PCM into 192kbps high-fidelity MP3, buffering the audio in memory to eliminate cloud network streaming timeouts.
+- **Resilient Multi-Stage DM Delivery**: Sends the final MP3 directly to the user's Direct Messages. If direct message sending fails, automatically retries via `createDM()`, and falls back to delivering the audio file in the invocation text channel if the user has private DMs closed.
+
+| Action     | Slash Command              | Prefix Command                 | Description                                                                   |
+| ---------- | -------------------------- | ------------------------------ | ----------------------------------------------------------------------------- |
+| **Start**  | `/record start [duration]` | `tree record start [duration]` | Starts voice recording in the current channel (default: 1 hour, max: 6 hours) |
+| **Stop**   | `/record stop`             | `tree record stop`             | Finalizes recording, encodes MP3, and sends file to your DM                   |
+| **Status** | `/record status`           | `tree record status`           | Displays active recording duration, channel, and server info                  |
+
 ---
 
 ## Deployment Model
@@ -784,7 +808,9 @@ NODE_ENV=production npm run register:commands
 
 ```bash
 npm install                  # Install dependencies
-npm test                     # Run full test suite (Node.js built-in test runner)
+npm test                     # Run full test suite (384 tests across 13 suites)
+npm run test:smoke           # Run end-to-end smoke test suite (13 automated checks)
+npm run test:mutation        # Run fault-injection mutation test harness (100% mutation score)
 npm run register:commands    # Deploy slash commands to test guild (instant)
 npm run dev                  # Start with nodemon (auto-reload)
 npm start                    # Production start
