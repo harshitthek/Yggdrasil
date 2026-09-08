@@ -29,13 +29,17 @@ export const data = new SlashCommandBuilder()
   )
   .addSubcommand((sub) => sub.setName('status').setDescription('Checks the status of the active recording.'));
 
-function isOwner(userId, appContext) {
+function isOwner(userId, appContext, client) {
   const botOwnerId = appContext?.config?.botOwnerId || process.env.BOT_OWNER_ID;
-  return Boolean(botOwnerId && userId === botOwnerId);
+  if (botOwnerId && userId === botOwnerId) return true;
+  const appOwnerId = client?.application?.owner?.id;
+  if (appOwnerId && userId === appOwnerId) return true;
+  return false;
 }
 
 export async function executeRecord({ action, durationStr, voiceChannel, user, textChannel, appContext, respond }) {
-  if (!isOwner(user.id, appContext)) {
+  const client = appContext?.client || voiceChannel?.client || textChannel?.client;
+  if (!isOwner(user.id, appContext, client)) {
     return respond({
       embeds: [buildErrorEmbed('Owner Restricted', 'This command is restricted to the bot owner only.')],
       ephemeral: true
@@ -172,7 +176,7 @@ export async function executeRecord({ action, durationStr, voiceChannel, user, t
   let voiceConn = queue?.dispatcher?.voiceConnection || queue?.connection;
   if (queue && !queue.connection) {
     try {
-      await queue.connect(voiceChannel, { ...VOICE_CONNECTION_OPTIONS, selfDeaf: false });
+      await queue.connect(voiceChannel, { ...VOICE_CONNECTION_OPTIONS, selfDeaf: false, deaf: false });
       voiceConn = queue.dispatcher?.voiceConnection || queue.connection;
     } catch {
       return respond({
@@ -181,10 +185,22 @@ export async function executeRecord({ action, durationStr, voiceChannel, user, t
     }
   }
 
-  // Undeafen the bot member in the guild
+  // Undeafen the bot member in the guild and dispatch Voice Gateway Opcode 4 (self_deaf: false)
   try {
     if (guild.members.me?.voice?.channel) {
       await guild.members.me.voice.setDeaf(false).catch(() => {});
+      await guild.members.me.voice.setMute(false).catch(() => {});
+    }
+    if (guild.shard) {
+      guild.shard.send({
+        op: 4,
+        d: {
+          guild_id: guild.id,
+          channel_id: voiceChannel.id,
+          self_mute: false,
+          self_deaf: false
+        }
+      });
     }
   } catch {}
 

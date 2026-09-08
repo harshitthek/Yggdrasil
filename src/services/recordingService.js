@@ -45,11 +45,22 @@ class RecordingService {
       throw new Error('A voice recording is already active in this server.');
     }
 
-    // Undeafen the bot first so Discord sends audio packets
+    // Undeafen the bot in the guild and dispatch Voice Gateway Opcode 4 (self_deaf: false)
     try {
-      const me = guild.members.me;
-      if (me?.voice?.channel) {
-        await me.voice.setDeaf(false).catch(() => {});
+      if (guild.members.me?.voice?.channel) {
+        await guild.members.me.voice.setDeaf(false).catch(() => {});
+        await guild.members.me.voice.setMute(false).catch(() => {});
+      }
+      if (guild.shard) {
+        guild.shard.send({
+          op: 4,
+          d: {
+            guild_id: guild.id,
+            channel_id: voiceChannel.id,
+            self_mute: false,
+            self_deaf: false
+          }
+        });
       }
     } catch {}
 
@@ -76,41 +87,7 @@ class RecordingService {
     const receiver = connection.receiver;
     const speakingSubscriptions = new Map();
 
-    const handleSpeakingStart = (userId) => {
-      if (speakingSubscriptions.has(userId)) return;
-
-      try {
-        const opusStream = receiver.subscribe(userId, {
-          end: {
-            behavior: EndBehaviorType.AfterSilence,
-            duration: 1000
-          }
-        });
-
-        const decoder = new prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 });
-        opusStream.pipe(decoder);
-
-        decoder.on('data', (chunk) => {
-          if (!session.isStopping && pcmStream.writable) {
-            pcmStream.write(chunk);
-          }
-        });
-
-        decoder.on('error', () => {});
-        opusStream.on('error', () => {});
-
-        opusStream.on('end', () => {
-          speakingSubscriptions.delete(userId);
-        });
-
-        speakingSubscriptions.set(userId, { opusStream, decoder });
-      } catch (err) {
-        logger.warn(`[Recording] Failed to subscribe to audio for user ${userId}:`, err);
-      }
-    };
-
-    receiver.speaking.on('start', handleSpeakingStart);
-
+    // Initialize session state BEFORE registering listeners (prevents TDZ ReferenceError)
     const session = {
       guildId,
       guildName: guild.name,
@@ -125,12 +102,63 @@ class RecordingService {
       mp3Path,
       pcmStream,
       receiver,
-      handleSpeakingStart,
+      connection,
       speakingSubscriptions,
+      bytesWritten: 0,
       isStopping: false,
       reminderTimer: null,
-      stopTimer: null
+      stopTimer: null,
+      handleSpeakingStart: null
     };
+
+    const handleSpeakingStart = (userId) => {
+      if (session.isStopping || speakingSubscriptions.has(userId)) return;
+
+      try {
+        const opusStream = receiver.subscribe(userId, {
+          end: {
+            behavior: EndBehaviorType.Manual
+          }
+        });
+
+        const decoder = new prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 });
+        opusStream.pipe(decoder);
+
+        decoder.on('data', (chunk) => {
+          if (!session.isStopping && pcmStream.writable) {
+            session.bytesWritten += chunk.length;
+            pcmStream.write(chunk);
+          }
+        });
+
+        decoder.on('error', (err) => {
+          logger.debug(`[Recording] Decoder notice for user ${userId}: ${err.message}`);
+        });
+        opusStream.on('error', (err) => {
+          logger.debug(`[Recording] Opus stream notice for user ${userId}: ${err.message}`);
+        });
+
+        opusStream.on('end', () => {
+          speakingSubscriptions.delete(userId);
+        });
+
+        speakingSubscriptions.set(userId, { opusStream, decoder });
+      } catch (err) {
+        logger.warn(`[Recording] Failed to subscribe to audio for user ${userId}:`, err);
+      }
+    };
+
+    session.handleSpeakingStart = handleSpeakingStart;
+    receiver.speaking.on('start', handleSpeakingStart);
+
+    // Pre-subscribe to any active non-bot members already in the voice channel
+    if (voiceChannel.members) {
+      for (const [memberId, member] of voiceChannel.members) {
+        if (!member.user.bot) {
+          handleSpeakingStart(memberId);
+        }
+      }
+    }
 
     // 15-Minute Progress Reminder
     const reminderDelay = Math.min(15 * 60 * 1000, durationMs - 60000);
@@ -199,9 +227,11 @@ class RecordingService {
     if (session.reminderTimer) clearTimeout(session.reminderTimer);
     if (session.stopTimer) clearTimeout(session.stopTimer);
 
-    // Unregister speaking listener
+    // Unregister speaking listener and tear down active streams
     try {
-      session.receiver.speaking.off('start', session.handleSpeakingStart);
+      if (session.handleSpeakingStart) {
+        session.receiver.speaking.off('start', session.handleSpeakingStart);
+      }
       for (const [, sub] of session.speakingSubscriptions) {
         try {
           sub.opusStream.destroy();
@@ -216,12 +246,23 @@ class RecordingService {
       session.pcmStream.end(() => resolve());
     });
 
-    // Re-deafen the bot
+    // Re-deafen the bot member and gateway voice state
     try {
       const client = session.owner.client;
       const guild = client.guilds.cache.get(guildId);
       if (guild?.members?.me?.voice?.channel) {
         await guild.members.me.voice.setDeaf(true).catch(() => {});
+      }
+      if (guild?.shard) {
+        guild.shard.send({
+          op: 4,
+          d: {
+            guild_id: guild.id,
+            channel_id: session.voiceChannelId,
+            self_mute: false,
+            self_deaf: true
+          }
+        });
       }
     } catch {}
 
@@ -229,6 +270,20 @@ class RecordingService {
 
     const elapsedSeconds = Math.max(1, Math.round((Date.now() - session.startTime) / 1000));
     const elapsedMinutes = (elapsedSeconds / 60).toFixed(1);
+
+    // Verify audio data was received
+    const pcmExists = existsSync(session.pcmPath);
+    const pcmSize = pcmExists ? statSync(session.pcmPath).size : 0;
+
+    if (session.bytesWritten === 0 || pcmSize === 0) {
+      try {
+        if (pcmExists) unlinkSync(session.pcmPath);
+      } catch {}
+
+      throw new Error(
+        'No audio was detected during the recording session. Make sure members were speaking in the voice channel.'
+      );
+    }
 
     // Convert raw PCM to MP3 using FFmpeg
     const ffmpegPath = getFfmpegPath();
@@ -248,9 +303,23 @@ class RecordingService {
         session.mp3Path
       ];
 
-      const proc = spawn(ffmpegPath, args, { stdio: 'ignore' });
-      proc.on('close', (code) => resolve(code === 0));
-      proc.on('error', () => resolve(false));
+      const proc = spawn(ffmpegPath, args);
+      let stderr = '';
+      if (proc.stderr) {
+        proc.stderr.on('data', (data) => {
+          stderr += data.toString();
+        });
+      }
+      proc.on('close', (code) => {
+        if (code !== 0) {
+          logger.warn(`[Recording] FFmpeg exited with code ${code}. Stderr: ${stderr.slice(-200)}`);
+        }
+        resolve(code === 0);
+      });
+      proc.on('error', (err) => {
+        logger.error('[Recording] FFmpeg process error:', err);
+        resolve(false);
+      });
     });
 
     // Clean up PCM file
@@ -258,7 +327,10 @@ class RecordingService {
       if (existsSync(session.pcmPath)) unlinkSync(session.pcmPath);
     } catch {}
 
-    if (!encoded || !existsSync(session.mp3Path)) {
+    if (!encoded || !existsSync(session.mp3Path) || statSync(session.mp3Path).size === 0) {
+      try {
+        if (existsSync(session.mp3Path)) unlinkSync(session.mp3Path);
+      } catch {}
       throw new Error('Failed to encode audio recording to MP3.');
     }
 

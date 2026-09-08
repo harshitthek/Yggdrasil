@@ -57,7 +57,11 @@ export async function connectMongo(mongoUri, options = {}) {
     return mongoose.connection;
   }
 
-  const connectOptions = {};
+  const connectOptions = {
+    maxPoolSize: 10,
+    minPoolSize: 1,
+    maxIdleTimeMS: 30000
+  };
   if (serverSelectionTimeoutMS !== undefined) {
     connectOptions.serverSelectionTimeoutMS = serverSelectionTimeoutMS;
   }

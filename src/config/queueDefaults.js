@@ -26,7 +26,7 @@ export const QUEUE_DEFAULTS = Object.freeze({
    * up. Lower values reduce the perceived "delay before music starts";
    * higher values help on slow connections. 3 s is a good middle ground.
    */
-  bufferingTimeout: 3_000
+  bufferingTimeout: 1_000
 });
 
 // discord-player 7 enables DAVE by default. Its current voice stack can end

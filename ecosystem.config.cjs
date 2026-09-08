@@ -16,6 +16,7 @@ module.exports = {
       restart_delay: 5000,
       exp_backoff_restart_delay: 1000,
 
+      node_args: '--max-old-space-size=384 --optimize-for-size',
       max_memory_restart: '500M',
 
       kill_timeout: 10000,
