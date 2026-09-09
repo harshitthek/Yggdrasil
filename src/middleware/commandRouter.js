@@ -114,11 +114,17 @@ export async function handleChatInputCommand(interaction, { log = logger } = {})
   }
 
   const settings =
-    settingsService && interaction.guild?.id
+    settingsService && interaction.guild?.id && (command.adminOnly || command.modOnly)
       ? await settingsService.getEffectiveSettings(interaction.guild.id).catch(() => null)
       : null;
 
-  if (command.botOwnerOnly && interaction.user.id !== runtimeConfig.botOwnerId) {
+  const isOwnerUser =
+    (runtimeConfig.botOwnerId && interaction.user.id === runtimeConfig.botOwnerId) ||
+    interaction.client?.application?.owner?.id === interaction.user.id ||
+    interaction.client?.application?.owner?.ownerUserId === interaction.user.id ||
+    interaction.client?.application?.owner?.members?.has?.(interaction.user.id);
+
+  if (command.botOwnerOnly && !isOwnerUser) {
     await replyToInteraction(
       interaction,
       { embeds: [buildErrorEmbed('Permission required', 'Only the configured bot owner can use that command.')] },

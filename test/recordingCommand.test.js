@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { executeRecord } from '../src/commands/utility/record.js';
+import { execute, executeRecord, isOwner, botOwnerOnly } from '../src/commands/utility/record.js';
 import { recordingService } from '../src/services/recordingService.js';
 
 test('record command rejects non-owner users', async () => {
@@ -242,4 +242,75 @@ test('record command stop handles stopRecording failure gracefully', async () =>
     recordingService.stopRecording = origStop;
     recordingService.activeRecordings.delete(guildId);
   }
+});
+
+test('record command exports botOwnerOnly flag', () => {
+  assert.equal(botOwnerOnly, true);
+});
+
+test('isOwner recognizes Discord Team owner and team members', () => {
+  const teamOwner = {
+    id: 'team-123',
+    ownerUserId: 'team-owner-user',
+    members: new Map([
+      ['team-owner-user', { id: 'team-owner-user' }],
+      ['team-member-user', { id: 'team-member-user' }]
+    ])
+  };
+  const client = { application: { owner: teamOwner } };
+
+  assert.equal(isOwner('team-owner-user', {}, client), true);
+  assert.equal(isOwner('team-member-user', {}, client), true);
+  assert.equal(isOwner('stranger-user', {}, client), false);
+});
+
+test('record execute immediately defers interaction and delegates execution', async () => {
+  const calls = [];
+  const interaction = {
+    deferred: false,
+    replied: false,
+    user: { id: 'owner-123' },
+    member: { voice: { channel: null } },
+    channel: { guild: { id: 'guild-exec', name: 'Test Guild' } },
+    options: {
+      getSubcommand: () => 'status',
+      getString: () => null
+    },
+    appContext: { config: { botOwnerId: 'owner-123' } },
+    deferReply: async (options) => {
+      interaction.deferred = true;
+      calls.push(['deferReply', options]);
+    },
+    editReply: async (payload) => {
+      calls.push(['editReply', payload]);
+    },
+    reply: async (payload) => {
+      calls.push(['reply', payload]);
+    }
+  };
+
+  await execute(interaction);
+
+  assert.equal(calls[0][0], 'deferReply');
+  assert.equal(calls[1][0], 'editReply');
+  assert.equal(calls[1][1].embeds[0].data.title, '🎙️ Recording Inactive');
+});
+
+test('record execute handles expired interaction (10062) gracefully', async () => {
+  const interaction = {
+    deferred: false,
+    replied: false,
+    user: { id: 'owner-123' },
+    appContext: { config: { botOwnerId: 'owner-123' } },
+    deferReply: async () => {
+      const err = new Error('Unknown interaction');
+      err.code = 10062;
+      throw err;
+    }
+  };
+
+  // Should not throw
+  await assert.doesNotReject(async () => {
+    await execute(interaction);
+  });
 });

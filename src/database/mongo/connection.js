@@ -4,6 +4,7 @@ import { logger } from '../../utils/logger.js';
 import { runPendingMigrations } from './migrationRunner.js';
 
 let hasRegisteredConnectionLogger = false;
+let keepAliveInterval = null;
 
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 5_000;
@@ -60,7 +61,7 @@ export async function connectMongo(mongoUri, options = {}) {
   const connectOptions = {
     maxPoolSize: 10,
     minPoolSize: 1,
-    maxIdleTimeMS: 30000
+    maxIdleTimeMS: 120000
   };
   if (serverSelectionTimeoutMS !== undefined) {
     connectOptions.serverSelectionTimeoutMS = serverSelectionTimeoutMS;
@@ -70,6 +71,18 @@ export async function connectMongo(mongoUri, options = {}) {
     try {
       await mongoose.connect(mongoUri, connectOptions);
       logger.info('MongoDB connected.');
+
+      if (!keepAliveInterval) {
+        keepAliveInterval = setInterval(() => {
+          if (mongoose.connection.readyState === 1) {
+            mongoose.connection.db
+              ?.admin?.()
+              ?.ping?.()
+              .catch(() => {});
+          }
+        }, 60000);
+        keepAliveInterval.unref?.();
+      }
       break;
     } catch (error) {
       if (attempt === maxRetries) {

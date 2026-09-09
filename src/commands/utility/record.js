@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 import ms from 'ms';
 import { getAppContext } from '../../context/appContext.js';
 import { recordingService } from '../../services/recordingService.js';
@@ -9,6 +9,7 @@ import { COLORS } from '../../utils/constants.js';
 export const name = 'record';
 export const aliases = ['rec', 'voice-record'];
 export const allowNoPrefix = false;
+export const botOwnerOnly = true;
 
 export const data = new SlashCommandBuilder()
   .setName('record')
@@ -29,11 +30,15 @@ export const data = new SlashCommandBuilder()
   )
   .addSubcommand((sub) => sub.setName('status').setDescription('Checks the status of the active recording.'));
 
-function isOwner(userId, appContext, client) {
+export function isOwner(userId, appContext, client) {
   const botOwnerId = appContext?.config?.botOwnerId || process.env.BOT_OWNER_ID;
   if (botOwnerId && userId === botOwnerId) return true;
-  const appOwnerId = client?.application?.owner?.id;
-  if (appOwnerId && userId === appOwnerId) return true;
+  const owner = client?.application?.owner;
+  if (owner) {
+    if (owner.id === userId) return true;
+    if (owner.ownerUserId === userId) return true;
+    if (owner.members?.has?.(userId)) return true;
+  }
   return false;
 }
 
@@ -234,13 +239,31 @@ export async function executeRecord({ action, durationStr, voiceChannel, user, t
 }
 
 export async function execute(interaction) {
-  const subcommand = interaction.options.getSubcommand() || 'start';
-  const durationStr = interaction.options.getString('duration');
+  const appContext = getAppContext(interaction) ?? {};
+  const client = interaction.client || appContext.client;
+  const isUserOwner = isOwner(interaction.user.id, appContext, client);
+
+  // Defer immediately to ensure the 3-second SLA is satisfied
+  if (!interaction.deferred && !interaction.replied) {
+    try {
+      await interaction.deferReply({
+        flags: isUserOwner ? undefined : MessageFlags.Ephemeral
+      });
+    } catch (err) {
+      if (err.code === 10062) {
+        return;
+      }
+      throw err;
+    }
+  }
+
+  const subcommand =
+    (typeof interaction.options?.getSubcommand === 'function' ? interaction.options.getSubcommand(false) : null) ||
+    'start';
+  const durationStr =
+    typeof interaction.options?.getString === 'function' ? interaction.options.getString('duration') : null;
   const voiceChannel = interaction.member?.voice?.channel;
   const textChannel = interaction.channel;
-  const appContext = getAppContext(interaction) ?? {};
-
-  await interaction.deferReply({ ephemeral: !isOwner(interaction.user.id, appContext) });
 
   await executeRecord({
     action: subcommand,
