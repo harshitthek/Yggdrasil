@@ -240,14 +240,12 @@ export async function executeRecord({ action, durationStr, voiceChannel, user, t
 
 export async function execute(interaction) {
   const appContext = getAppContext(interaction) ?? {};
-  const client = interaction.client || appContext.client;
-  const isUserOwner = isOwner(interaction.user.id, appContext, client);
 
   // Defer immediately to ensure the 3-second SLA is satisfied
   if (!interaction.deferred && !interaction.replied) {
     try {
       await interaction.deferReply({
-        flags: isUserOwner ? undefined : MessageFlags.Ephemeral
+        flags: MessageFlags.Ephemeral
       });
     } catch (err) {
       if (err.code === 10062) {

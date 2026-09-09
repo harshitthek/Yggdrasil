@@ -41,8 +41,8 @@ function ensureHandlersRegistered() {
 // Register at module load. Guarded so repeated imports / hot reloads are safe.
 ensureHandlersRegistered();
 
-async function handleUnknownCommand(interaction, log) {
-  log.warn(`No command handler found for /${interaction.commandName}.`);
+async function handleUnknownCommand(interaction, log, commandsCount = 0) {
+  log.warn(`No command handler found for /${interaction.commandName}. Loaded commands: ${commandsCount}`);
   await replyToInteraction(
     interaction,
     { embeds: [buildErrorEmbed('Command unavailable', 'That command is not available right now.')] },
@@ -92,12 +92,15 @@ export async function handleComponentInteraction(interaction) {
 export async function handleChatInputCommand(interaction, { log = logger } = {}) {
   const appContext = getAppContext(interaction) ?? {};
   const commands = appContext.commands ?? new Map();
+  log.info(
+    `[CommandRouter] Received /${interaction.commandName} from user ${interaction.user?.tag || interaction.user?.id} in guild ${interaction.guildId}`
+  );
   const runtimeConfig = appContext.runtimeConfig ?? {};
   const settingsService = appContext.settingsService ?? null;
   const command = commands.get(normalizeCommandName(interaction.commandName));
 
   if (!command) {
-    await handleUnknownCommand(interaction, log);
+    await handleUnknownCommand(interaction, log, commands.size);
     return;
   }
 
