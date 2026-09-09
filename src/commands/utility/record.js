@@ -5,6 +5,7 @@ import { recordingService } from '../../services/recordingService.js';
 import { QUEUE_DEFAULTS, VOICE_CONNECTION_OPTIONS } from '../../config/queueDefaults.js';
 import { buildErrorEmbed, buildSuccessEmbed, buildBaseEmbed } from '../../utils/embeds.js';
 import { COLORS } from '../../utils/constants.js';
+import { logger } from '../../utils/logger.js';
 
 export const name = 'record';
 export const aliases = ['rec', 'voice-record'];
@@ -36,6 +37,7 @@ export function isOwner(userId, appContext, client) {
   const owner = client?.application?.owner;
   if (owner) {
     if (owner.id === userId) return true;
+    if (owner.ownerId === userId) return true;
     if (owner.ownerUserId === userId) return true;
     if (owner.members?.has?.(userId)) return true;
   }
@@ -240,6 +242,9 @@ export async function executeRecord({ action, durationStr, voiceChannel, user, t
 
 export async function execute(interaction) {
   const appContext = getAppContext(interaction) ?? {};
+  logger.info(
+    `[RecordCommand] In execute for user ${interaction.user?.tag || interaction.user?.id} (${interaction.user?.id}), sub: ${interaction.options?.getSubcommand?.(false) || 'default'}`
+  );
 
   // Defer immediately to ensure the 3-second SLA is satisfied
   if (!interaction.deferred && !interaction.replied) {
@@ -247,7 +252,9 @@ export async function execute(interaction) {
       await interaction.deferReply({
         flags: MessageFlags.Ephemeral
       });
+      logger.info(`[RecordCommand] deferReply success`);
     } catch (err) {
+      logger.error(`[RecordCommand] deferReply error:`, err);
       if (err.code === 10062) {
         return;
       }
@@ -260,8 +267,20 @@ export async function execute(interaction) {
     'start';
   const durationStr =
     typeof interaction.options?.getString === 'function' ? interaction.options.getString('duration') : null;
-  const voiceChannel = interaction.member?.voice?.channel;
+
+  let member = interaction.member;
+  if (!member?.voice?.channelId && interaction.guild) {
+    member = await interaction.guild.members.fetch(interaction.user.id).catch(() => member);
+  }
+  let voiceChannel = member?.voice?.channel;
+  if (!voiceChannel && member?.voice?.channelId) {
+    voiceChannel =
+      interaction.guild.channels.cache.get(member.voice.channelId) ||
+      (await interaction.guild.channels.fetch(member.voice.channelId).catch(() => null));
+  }
   const textChannel = interaction.channel;
+
+  logger.info(`[RecordCommand] Calling executeRecord: action=${subcommand}, vc=${voiceChannel?.name || 'none'}`);
 
   await executeRecord({
     action: subcommand,
@@ -271,11 +290,13 @@ export async function execute(interaction) {
     textChannel,
     appContext,
     respond: async (payload) => {
+      logger.info(`[RecordCommand] respond payload: ${JSON.stringify(payload)}`);
       if (interaction.replied || interaction.deferred) {
         await interaction.editReply(payload);
       } else {
         await interaction.reply(payload);
       }
+      logger.info(`[RecordCommand] respond finished`);
     }
   });
 }

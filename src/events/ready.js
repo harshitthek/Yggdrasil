@@ -12,6 +12,8 @@ export async function execute(client) {
   client.user.setActivity(BOT.activity, { type: ActivityType.Watching });
   logger.info(`Logged in as ${client.user.tag}.`);
 
+  await client.application?.fetch()?.catch(() => null);
+
   const appContext = getAppContext(client);
   if (appContext) {
     await reconnect247Guilds(client, appContext);

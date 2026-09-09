@@ -64,8 +64,8 @@ class RecordingService {
       }
     } catch {}
 
-    let connection = voiceConnection || getVoiceConnection(guildId);
-    if (!connection && voiceChannel) {
+    let connection = (voiceConnection?.receiver ? voiceConnection : null) || getVoiceConnection(guildId);
+    if ((!connection || !connection.receiver) && voiceChannel) {
       connection = joinVoiceChannel({
         channelId: voiceChannel.id,
         guildId: guild.id,
