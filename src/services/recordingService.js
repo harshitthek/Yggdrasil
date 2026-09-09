@@ -1,7 +1,17 @@
 import { createWriteStream, existsSync, mkdirSync, unlinkSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
-import { getVoiceConnection, joinVoiceChannel, EndBehaviorType } from '@discordjs/voice';
+import { Readable } from 'node:stream';
+import {
+  createAudioPlayer,
+  createAudioResource,
+  entersState,
+  getVoiceConnection,
+  joinVoiceChannel,
+  VoiceConnectionStatus,
+  EndBehaviorType,
+  StreamType
+} from '@discordjs/voice';
 import prism from 'prism-media';
 import ffmpegStatic from 'ffmpeg-static';
 import { AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
@@ -39,13 +49,84 @@ class RecordingService {
   /**
    * Starts voice channel audio recording.
    */
-  async startRecording({ guild, voiceChannel, owner, textChannel, durationMs = 3600000, voiceConnection }) {
+  async startRecording({
+    guild,
+    voiceChannel,
+    owner,
+    textChannel,
+    durationMs = 3600000,
+    voiceConnection = null,
+    appContext = null
+  }) {
     const guildId = guild.id;
     if (this.activeRecordings.has(guildId)) {
       throw new Error('A voice recording is already active in this server.');
     }
 
-    // Undeafen the bot in the guild and dispatch Voice Gateway Opcode 4 (self_deaf: false)
+    if (!voiceChannel && !voiceConnection) {
+      throw new Error('The bot is not connected to a voice channel in this server.');
+    }
+
+    let connection = voiceConnection || getVoiceConnection(guildId);
+    if (!connection && voiceChannel) {
+      // 1. Release existing discord-player queue so discord-voip releases the voice adapter
+      const playerService = appContext?.playerService;
+      const existingQueue = playerService?.getGuildQueue(guildId);
+      if (existingQueue) {
+        logger.info(`[Recording] Releasing discord-player queue for guild ${guildId} to allow voice receiver.`);
+        try {
+          existingQueue.delete();
+        } catch (err) {
+          logger.warn(`[Recording] Notice while deleting existing queue: ${err.message}`);
+        }
+      }
+
+      // 2. Destroy any existing @discordjs/voice connection
+      const existingVoice = getVoiceConnection(guildId);
+      if (existingVoice) {
+        logger.info(`[Recording] Destroying existing @discordjs/voice connection for guild ${guildId}.`);
+        try {
+          existingVoice.destroy();
+        } catch (err) {
+          logger.warn(`[Recording] Notice while destroying existing connection: ${err.message}`);
+        }
+      }
+
+      // 3. Disconnect bot from Discord voice state if currently in a channel to ensure fresh Voice Gateway tokens
+      if (guild.members?.me?.voice?.channelId) {
+        try {
+          await guild.members.me.voice.disconnect();
+          await new Promise((r) => setTimeout(r, 500));
+        } catch (err) {
+          logger.warn(`[Recording] Notice while disconnecting voice: ${err.message}`);
+        }
+      }
+
+      // 4. Connect cleanly using @discordjs/voice
+      connection = joinVoiceChannel({
+        channelId: voiceChannel.id,
+        guildId: guild.id,
+        adapterCreator: guild.voiceAdapterCreator,
+        selfDeaf: false,
+        selfMute: false
+      });
+
+      try {
+        await entersState(connection, VoiceConnectionStatus.Ready, 15000);
+        logger.info(`[Recording] Voice connection READY in "${voiceChannel.name}" for guild "${guild.name}".`);
+      } catch (err) {
+        try {
+          connection.destroy();
+        } catch {}
+        throw new Error(`Failed to establish voice connection: ${err.message}`, { cause: err });
+      }
+    }
+
+    if (!connection || !connection.receiver) {
+      throw new Error('The bot is not connected to a voice channel in this server.');
+    }
+
+    // 5. Undeafen and unmute bot on Discord gateway
     try {
       if (guild.members.me?.voice?.channel) {
         await guild.members.me.voice.setDeaf(false).catch(() => {});
@@ -64,19 +145,24 @@ class RecordingService {
       }
     } catch {}
 
-    let connection = (voiceConnection?.receiver ? voiceConnection : null) || getVoiceConnection(guildId);
-    if ((!connection || !connection.receiver) && voiceChannel) {
-      connection = joinVoiceChannel({
-        channelId: voiceChannel.id,
-        guildId: guild.id,
-        adapterCreator: guild.voiceAdapterCreator,
-        selfDeaf: false,
-        selfMute: false
+    // 6. Warm up Discord voice UDP NAT tunnel by transmitting a 1-frame Opus silence packet
+    try {
+      const SILENCE_FRAME = Buffer.from([0xf8, 0xff, 0xfe]);
+      const silenceStream = new Readable({
+        read() {
+          this.push(SILENCE_FRAME);
+          this.push(null);
+        }
       });
-    }
-
-    if (!connection || !connection.receiver) {
-      throw new Error('The bot is not connected to a voice channel in this server.');
+      const player = createAudioPlayer();
+      const resource = createAudioResource(silenceStream, {
+        inputType: StreamType.Opus
+      });
+      player.play(resource);
+      connection.subscribe(player);
+      logger.info(`[Recording] Warm-up silence frame sent to Discord voice mixer.`);
+    } catch (err) {
+      logger.warn(`[Recording] Notice while sending warm-up packet: ${err.message}`);
     }
 
     const timestamp = Date.now();
@@ -114,6 +200,8 @@ class RecordingService {
     const handleSpeakingStart = (userId) => {
       if (session.isStopping || speakingSubscriptions.has(userId)) return;
 
+      logger.info(`[Recording] User ${userId} speaking detected. Subscribing to audio stream.`);
+
       try {
         const opusStream = receiver.subscribe(userId, {
           end: {
@@ -128,18 +216,24 @@ class RecordingService {
           if (!session.isStopping && pcmStream.writable) {
             session.bytesWritten += chunk.length;
             pcmStream.write(chunk);
+            if (session.bytesWritten % 192000 < chunk.length) {
+              logger.info(`[Recording] Captured ${session.bytesWritten} bytes of PCM audio from voice channel.`);
+            }
           }
         });
 
-        decoder.on('error', (err) => {
-          logger.debug(`[Recording] Decoder notice for user ${userId}: ${err.message}`);
-        });
         opusStream.on('error', (err) => {
-          logger.debug(`[Recording] Opus stream notice for user ${userId}: ${err.message}`);
+          logger.warn(`[Recording] Opus stream notice for user ${userId}: ${err.message}`);
+          speakingSubscriptions.delete(userId);
         });
 
-        opusStream.on('end', () => {
+        opusStream.on('close', () => {
+          logger.debug(`[Recording] Opus stream closed for user ${userId}`);
           speakingSubscriptions.delete(userId);
+        });
+
+        decoder.on('error', (err) => {
+          logger.warn(`[Recording] Decoder notice for user ${userId}: ${err.message}`);
         });
 
         speakingSubscriptions.set(userId, { opusStream, decoder });
@@ -155,6 +249,7 @@ class RecordingService {
     if (voiceChannel.members) {
       for (const [memberId, member] of voiceChannel.members) {
         if (!member.user.bot) {
+          logger.info(`[Recording] Pre-subscribing to member ${memberId} in voice channel.`);
           handleSpeakingStart(memberId);
         }
       }
@@ -246,27 +341,21 @@ class RecordingService {
       session.pcmStream.end(() => resolve());
     });
 
-    // Re-deafen the bot member and gateway voice state
+    // Destroy the recording voice connection
     try {
-      const client = session.owner.client;
-      const guild = client.guilds.cache.get(guildId);
-      if (guild?.members?.me?.voice?.channel) {
-        await guild.members.me.voice.setDeaf(true).catch(() => {});
-      }
-      if (guild?.shard) {
-        guild.shard.send({
-          op: 4,
-          d: {
-            guild_id: guild.id,
-            channel_id: session.voiceChannelId,
-            self_mute: false,
-            self_deaf: true
-          }
-        });
-      }
+      session.connection.destroy();
     } catch {}
 
     this.activeRecordings.delete(guildId);
+
+    // Recheck 24/7 presence if enabled so bot resumes standby
+    const client = session.owner?.client;
+    const appContext = client?.appContext;
+    if (client && appContext) {
+      import('./musicService.js')
+        .then(({ reconnect247Guilds }) => reconnect247Guilds(client, appContext, { quiet: true }))
+        .catch(() => {});
+    }
 
     const elapsedSeconds = Math.max(1, Math.round((Date.now() - session.startTime) / 1000));
     const elapsedMinutes = (elapsedSeconds / 60).toFixed(1);
@@ -274,6 +363,8 @@ class RecordingService {
     // Verify audio data was received
     const pcmExists = existsSync(session.pcmPath);
     const pcmSize = pcmExists ? statSync(session.pcmPath).size : 0;
+
+    logger.info(`[Recording] Finalizing session: bytesWritten=${session.bytesWritten}, pcmSize=${pcmSize}`);
 
     if (session.bytesWritten === 0 || pcmSize === 0) {
       try {

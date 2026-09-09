@@ -41,8 +41,8 @@ function ensureHandlersRegistered() {
 // Register at module load. Guarded so repeated imports / hot reloads are safe.
 ensureHandlersRegistered();
 
-async function handleUnknownCommand(interaction, log, commandsCount = 0) {
-  log.warn(`No command handler found for /${interaction.commandName}. Loaded commands: ${commandsCount}`);
+async function handleUnknownCommand(interaction, log, _commandsCount = 0) {
+  log.warn(`No command handler found for /${interaction.commandName}.`);
   await replyToInteraction(
     interaction,
     { embeds: [buildErrorEmbed('Command unavailable', 'That command is not available right now.')] },
@@ -92,7 +92,7 @@ export async function handleComponentInteraction(interaction) {
 export async function handleChatInputCommand(interaction, { log = logger } = {}) {
   const appContext = getAppContext(interaction) ?? {};
   const commands = appContext.commands ?? new Map();
-  log.info(
+  log?.info?.(
     `[CommandRouter] Received /${interaction.commandName} from user ${interaction.user?.tag || interaction.user?.id} in guild ${interaction.guildId}`
   );
   const runtimeConfig = appContext.runtimeConfig ?? {};
@@ -121,11 +121,13 @@ export async function handleChatInputCommand(interaction, { log = logger } = {})
       ? await settingsService.getEffectiveSettings(interaction.guild.id).catch(() => null)
       : null;
 
+  const userId = interaction.user?.id;
   const isOwnerUser =
-    (runtimeConfig.botOwnerId && interaction.user.id === runtimeConfig.botOwnerId) ||
-    interaction.client?.application?.owner?.id === interaction.user.id ||
-    interaction.client?.application?.owner?.ownerUserId === interaction.user.id ||
-    interaction.client?.application?.owner?.members?.has?.(interaction.user.id);
+    Boolean(userId) &&
+    ((runtimeConfig.botOwnerId && userId === runtimeConfig.botOwnerId) ||
+      interaction.client?.application?.owner?.id === userId ||
+      interaction.client?.application?.owner?.ownerUserId === userId ||
+      Boolean(interaction.client?.application?.owner?.members?.has?.(userId)));
 
   if (command.botOwnerOnly && !isOwnerUser) {
     await replyToInteraction(

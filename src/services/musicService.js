@@ -5,6 +5,7 @@ import { QUEUE_DEFAULTS, VOICE_CONNECTION_OPTIONS } from '../config/queueDefault
 import { buildNowPlayingEmbed, buildSuccessEmbed, buildErrorEmbed, buildNeutralEmbed } from '../utils/embeds.js';
 import { buildMusicPlayerComponents } from '../utils/components.js';
 import { logger } from '../utils/logger.js';
+import { recordingService } from './recordingService.js';
 import { WorldTreeYoutubeExtractor } from './music/youtube/WorldTreeYoutubeExtractor.js';
 import { runYoutubeDiagnostic } from './music/youtube/YoutubeDiagnostic.js';
 
@@ -540,6 +541,11 @@ export async function reconnect247Guilds(client, appContext, { quiet = false } =
       const voiceChannelId = record.twentyFourSeven?.voiceChannelId;
       const textChannelId = record.twentyFourSeven?.textChannelId;
       if (!guildId || !voiceChannelId) continue;
+
+      // Skip if recording is active in this guild to prevent interrupting voice receiver
+      if (recordingService.isRecording(guildId)) {
+        continue;
+      }
 
       // Circuit-breaker check: back off if too many consecutive failures
       const failureState = reconnectFailures.get(guildId);

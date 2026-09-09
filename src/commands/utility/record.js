@@ -2,7 +2,6 @@ import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 import ms from 'ms';
 import { getAppContext } from '../../context/appContext.js';
 import { recordingService } from '../../services/recordingService.js';
-import { QUEUE_DEFAULTS, VOICE_CONNECTION_OPTIONS } from '../../config/queueDefaults.js';
 import { buildErrorEmbed, buildSuccessEmbed, buildBaseEmbed } from '../../utils/embeds.js';
 import { COLORS } from '../../utils/constants.js';
 import { logger } from '../../utils/logger.js';
@@ -164,53 +163,6 @@ export async function executeRecord({ action, durationStr, voiceChannel, user, t
     }
   }
 
-  // Ensure bot is in voice channel and undeafened
-  const playerService = appContext?.playerService;
-  const player = playerService?.getPlayer();
-  let queue = playerService?.getGuildQueue(guildId);
-
-  if (!queue && player) {
-    queue = player.nodes.create(guild, {
-      ...QUEUE_DEFAULTS,
-      selfDeaf: false,
-      metadata: {
-        channel: textChannel,
-        is247: true
-      }
-    });
-  }
-
-  let voiceConn = queue?.dispatcher?.voiceConnection || queue?.connection;
-  if (queue && !queue.connection) {
-    try {
-      await queue.connect(voiceChannel, { ...VOICE_CONNECTION_OPTIONS, selfDeaf: false, deaf: false });
-      voiceConn = queue.dispatcher?.voiceConnection || queue.connection;
-    } catch {
-      return respond({
-        embeds: [buildErrorEmbed('Connection Failed', 'Could not join voice channel.')]
-      });
-    }
-  }
-
-  // Undeafen the bot member in the guild and dispatch Voice Gateway Opcode 4 (self_deaf: false)
-  try {
-    if (guild.members.me?.voice?.channel) {
-      await guild.members.me.voice.setDeaf(false).catch(() => {});
-      await guild.members.me.voice.setMute(false).catch(() => {});
-    }
-    if (guild.shard) {
-      guild.shard.send({
-        op: 4,
-        d: {
-          guild_id: guild.id,
-          channel_id: voiceChannel.id,
-          self_mute: false,
-          self_deaf: false
-        }
-      });
-    }
-  } catch {}
-
   try {
     await recordingService.startRecording({
       guild,
@@ -218,7 +170,7 @@ export async function executeRecord({ action, durationStr, voiceChannel, user, t
       owner: user,
       textChannel,
       durationMs,
-      voiceConnection: voiceConn
+      appContext
     });
 
     const durationDisplay = ms(durationMs, { long: true });
