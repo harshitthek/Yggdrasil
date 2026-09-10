@@ -1,4 +1,4 @@
-import { createWriteStream, existsSync, mkdirSync, unlinkSync, statSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, unlinkSync, statSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { Readable } from 'node:stream';
@@ -16,7 +16,7 @@ import prism from 'prism-media';
 import ffmpegStatic from 'ffmpeg-static';
 import { AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { logger } from '../utils/logger.js';
-import { buildBaseEmbed, buildErrorEmbed, buildSuccessEmbed } from '../utils/embeds.js';
+import { buildBaseEmbed, buildSuccessEmbed } from '../utils/embeds.js';
 import { COLORS } from '../utils/constants.js';
 
 const RECORDINGS_DIR = join(process.cwd(), 'storage', 'recordings');
@@ -81,28 +81,7 @@ class RecordingService {
         }
       }
 
-      // 2. Destroy any existing @discordjs/voice connection
-      const existingVoice = getVoiceConnection(guildId);
-      if (existingVoice) {
-        logger.info(`[Recording] Destroying existing @discordjs/voice connection for guild ${guildId}.`);
-        try {
-          existingVoice.destroy();
-        } catch (err) {
-          logger.warn(`[Recording] Notice while destroying existing connection: ${err.message}`);
-        }
-      }
-
-      // 3. Disconnect bot from Discord voice state if currently in a channel to ensure fresh Voice Gateway tokens
-      if (guild.members?.me?.voice?.channelId) {
-        try {
-          await guild.members.me.voice.disconnect();
-          await new Promise((r) => setTimeout(r, 500));
-        } catch (err) {
-          logger.warn(`[Recording] Notice while disconnecting voice: ${err.message}`);
-        }
-      }
-
-      // 4. Connect cleanly using @discordjs/voice
+      // 2. Connect or attach cleanly using @discordjs/voice without leaving the voice channel
       connection = joinVoiceChannel({
         channelId: voiceChannel.id,
         guildId: guild.id,
@@ -176,6 +155,7 @@ class RecordingService {
     // Initialize session state BEFORE registering listeners (prevents TDZ ReferenceError)
     const session = {
       guildId,
+      guild,
       guildName: guild.name,
       voiceChannelId: voiceChannel.id,
       voiceChannelName: voiceChannel.name,
@@ -341,17 +321,34 @@ class RecordingService {
       session.pcmStream.end(() => resolve());
     });
 
-    // Destroy the recording voice connection
-    try {
-      session.connection.destroy();
-    } catch {}
-
     this.activeRecordings.delete(guildId);
 
-    // Recheck 24/7 presence if enabled so bot resumes standby
-    const client = session.owner?.client;
+    const client = session.owner?.client || session.guild?.client;
     const appContext = client?.appContext;
-    if (client && appContext) {
+    const settingsService = appContext?.settingsService;
+    let is247Enabled = false;
+    if (settingsService) {
+      try {
+        const settings = await settingsService.getEffectiveSettings(guildId);
+        is247Enabled = Boolean(settings?.twentyFourSeven?.enabled);
+      } catch {}
+    }
+
+    if (is247Enabled) {
+      logger.info(`[Recording] 24/7 mode active for guild ${guildId} — maintaining voice connection in channel.`);
+      try {
+        const guild = client?.guilds?.cache?.get(guildId) || session.guild;
+        if (guild?.members?.me?.voice?.channel) {
+          await guild.members.me.voice.setDeaf(true).catch(() => {});
+        }
+      } catch {}
+    } else {
+      try {
+        session.connection?.destroy?.();
+      } catch {}
+    }
+
+    if (!is247Enabled && client && appContext) {
       import('./musicService.js')
         .then(({ reconnect247Guilds }) => reconnect247Guilds(client, appContext, { quiet: true }))
         .catch(() => {});
@@ -425,14 +422,21 @@ class RecordingService {
       throw new Error('Failed to encode audio recording to MP3.');
     }
 
+    const fileBuffer = readFileSync(session.mp3Path);
     const fileSizeMb = (statSync(session.mp3Path).size / (1024 * 1024)).toFixed(2);
-    const attachment = new AttachmentBuilder(session.mp3Path, {
-      name: `recording_${session.guildName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().slice(0, 10)}.mp3`
-    });
+    const safeGuildName = session.guildName ? session.guildName.replace(/[^a-zA-Z0-9]/g, '_') : 'recording';
+    const filename = `recording_${safeGuildName}_${new Date().toISOString().slice(0, 10)}.mp3`;
+    const attachment = new AttachmentBuilder(fileBuffer, { name: filename });
 
-    // Send audio attachment and report to Owner DM
+    // Deliver audio attachment to owner's DM with automatic retry and channel fallback
+    let delivered = false;
+    let targetUser = session.owner;
+    if (client?.users && session.ownerId) {
+      targetUser = await client.users.fetch(session.ownerId).catch(() => session.owner);
+    }
+
     try {
-      await session.owner.send({
+      await targetUser.send({
         embeds: [
           buildSuccessEmbed(
             '🎙️ Voice Recording Complete',
@@ -446,31 +450,51 @@ class RecordingService {
         ],
         files: [attachment]
       });
+      delivered = true;
       logger.info(`[Recording] Successfully delivered MP3 recording (${fileSizeMb}MB) to owner ${session.ownerId}.`);
     } catch (err) {
-      logger.error(`[Recording] Failed to DM audio file to owner:`, err);
-      // Fallback: Notify in text channel if DM closed
-      if (session.textChannel) {
-        await session.textChannel
-          .send({
-            content: `<@${session.ownerId}>`,
-            embeds: [
-              buildErrorEmbed(
-                'Recording DM Failed',
-                'Your recording was completed, but I could not DM you the file. Please check your DM privacy settings.'
-              )
-            ]
-          })
-          .catch(() => {});
+      logger.warn(`[Recording] Direct user.send notice (${err.message}), retrying via createDM...`);
+      try {
+        const dmChannel = await targetUser.createDM();
+        await dmChannel.send({
+          embeds: [
+            buildSuccessEmbed(
+              '🎙️ Voice Recording Complete',
+              `Here is your private voice recording.\n\n` +
+                `📍 **Server:** ${session.guildName}\n` +
+                `🔊 **Channel:** #${session.voiceChannelName}\n` +
+                `⏱️ **Duration:** ${elapsedMinutes} minutes (${elapsedSeconds}s)\n` +
+                `💾 **File Size:** ${fileSizeMb} MB`
+            )
+          ],
+          files: [new AttachmentBuilder(fileBuffer, { name: filename })]
+        });
+        delivered = true;
+        logger.info(`[Recording] Successfully delivered MP3 recording on retry to owner ${session.ownerId}.`);
+      } catch (retryErr) {
+        logger.error(`[Recording] Retry DM delivery failed:`, retryErr);
       }
-    } finally {
-      // Clean up MP3 file after delivery
-      setTimeout(() => {
-        try {
-          if (existsSync(session.mp3Path)) unlinkSync(session.mp3Path);
-        } catch {}
-      }, 30000);
     }
+
+    if (!delivered && session.textChannel) {
+      try {
+        await session.textChannel.send({
+          content: `⚠️ <@${session.ownerId}> Could not deliver to your Direct Messages (privacy settings may be blocking bot DMs). Here is your recording:`,
+          files: [new AttachmentBuilder(fileBuffer, { name: filename })]
+        });
+        logger.info(`[Recording] Delivered recording to text channel fallback #${session.textChannel.name}`);
+      } catch (fallbackErr) {
+        logger.error(`[Recording] Failed to deliver to text channel fallback:`, fallbackErr);
+      }
+    }
+
+    // Clean up MP3 file after delivery
+    const cleanupTimer = setTimeout(() => {
+      try {
+        if (existsSync(session.mp3Path)) unlinkSync(session.mp3Path);
+      } catch {}
+    }, 30000);
+    cleanupTimer?.unref?.();
 
     return {
       guildName: session.guildName,

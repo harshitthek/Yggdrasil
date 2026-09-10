@@ -109,3 +109,255 @@ test('recordingService stopRecording throws friendly error when 0 bytes were det
     if (existsSync(testPcmPath)) unlinkSync(testPcmPath);
   }
 });
+
+test('recordingService stopRecording retains voice connection and redeafens when 24/7 mode is enabled', async () => {
+  const guildId = 'guild-247-enabled';
+  const testPcmPath = `./storage/recordings/test_247_${Date.now()}.pcm`;
+  const testMp3Path = `./storage/recordings/test_247_${Date.now()}.mp3`;
+  writeFileSync(testPcmPath, Buffer.alloc(19200));
+
+  let connectionDestroyed = false;
+  let redeafened = false;
+  let dmDelivered = false;
+
+  const mockSession = {
+    guildId,
+    guildName: 'Test Guild',
+    voiceChannelId: 'vc-1',
+    voiceChannelName: 'Voice',
+    ownerId: 'owner-1',
+    owner: {
+      id: 'owner-1',
+      send: async () => {
+        dmDelivered = true;
+      },
+      client: {
+        appContext: {
+          settingsService: {
+            getEffectiveSettings: async () => ({ twentyFourSeven: { enabled: true } })
+          }
+        },
+        guilds: {
+          cache: new Map([
+            [
+              guildId,
+              {
+                members: {
+                  me: {
+                    voice: {
+                      channel: { id: 'vc-1' },
+                      setDeaf: async (val) => {
+                        redeafened = val;
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          ])
+        }
+      }
+    },
+    connection: {
+      destroy: () => {
+        connectionDestroyed = true;
+      }
+    },
+    startTime: Date.now() - 5000,
+    pcmPath: testPcmPath,
+    mp3Path: testMp3Path,
+    pcmStream: { end: (cb) => cb() },
+    receiver: { speaking: { off: () => {} } },
+    speakingSubscriptions: new Map(),
+    bytesWritten: 19200,
+    isStopping: false
+  };
+
+  recordingService.activeRecordings.set(guildId, mockSession);
+
+  try {
+    const result = await recordingService.stopRecording(guildId);
+    assert.equal(result.guildName, 'Test Guild');
+    assert.equal(connectionDestroyed, false);
+    assert.equal(redeafened, true);
+    assert.equal(dmDelivered, true);
+  } finally {
+    recordingService.activeRecordings.delete(guildId);
+    if (existsSync(testPcmPath)) unlinkSync(testPcmPath);
+    if (existsSync(testMp3Path)) unlinkSync(testMp3Path);
+  }
+});
+
+test('recordingService stopRecording destroys voice connection when 24/7 mode is disabled', async () => {
+  const guildId = 'guild-247-disabled';
+  const testPcmPath = `./storage/recordings/test_no247_${Date.now()}.pcm`;
+  const testMp3Path = `./storage/recordings/test_no247_${Date.now()}.mp3`;
+  writeFileSync(testPcmPath, Buffer.alloc(19200));
+
+  let connectionDestroyed = false;
+
+  const mockSession = {
+    guildId,
+    guildName: 'Test Guild',
+    voiceChannelId: 'vc-1',
+    voiceChannelName: 'Voice',
+    ownerId: 'owner-1',
+    owner: {
+      id: 'owner-1',
+      send: async () => {},
+      client: {
+        appContext: {
+          settingsService: {
+            getEffectiveSettings: async () => ({ twentyFourSeven: { enabled: false } })
+          }
+        },
+        guilds: { cache: new Map() }
+      }
+    },
+    connection: {
+      destroy: () => {
+        connectionDestroyed = true;
+      }
+    },
+    startTime: Date.now() - 5000,
+    pcmPath: testPcmPath,
+    mp3Path: testMp3Path,
+    pcmStream: { end: (cb) => cb() },
+    receiver: { speaking: { off: () => {} } },
+    speakingSubscriptions: new Map(),
+    bytesWritten: 19200,
+    isStopping: false
+  };
+
+  recordingService.activeRecordings.set(guildId, mockSession);
+
+  try {
+    await recordingService.stopRecording(guildId);
+    assert.equal(connectionDestroyed, true);
+  } finally {
+    recordingService.activeRecordings.delete(guildId);
+    if (existsSync(testPcmPath)) unlinkSync(testPcmPath);
+    if (existsSync(testMp3Path)) unlinkSync(testMp3Path);
+  }
+});
+
+test('recordingService stopRecording retries via createDM if direct send throws', async () => {
+  const guildId = 'guild-dm-retry';
+  const testPcmPath = `./storage/recordings/test_retry_${Date.now()}.pcm`;
+  const testMp3Path = `./storage/recordings/test_retry_${Date.now()}.mp3`;
+  writeFileSync(testPcmPath, Buffer.alloc(19200));
+
+  let retrySent = false;
+  let directSendAttempted = false;
+
+  const mockSession = {
+    guildId,
+    guildName: 'Test Guild',
+    voiceChannelId: 'vc-1',
+    voiceChannelName: 'Voice',
+    ownerId: 'owner-1',
+    owner: {
+      id: 'owner-1',
+      send: async () => {
+        directSendAttempted = true;
+        throw new Error('Cannot send messages to this user');
+      },
+      createDM: async () => ({
+        send: async () => {
+          retrySent = true;
+        }
+      }),
+      client: {
+        appContext: {
+          settingsService: {
+            getEffectiveSettings: async () => ({ twentyFourSeven: { enabled: false } })
+          }
+        },
+        guilds: { cache: new Map() }
+      }
+    },
+    connection: { destroy: () => {} },
+    startTime: Date.now() - 5000,
+    pcmPath: testPcmPath,
+    mp3Path: testMp3Path,
+    pcmStream: { end: (cb) => cb() },
+    receiver: { speaking: { off: () => {} } },
+    speakingSubscriptions: new Map(),
+    bytesWritten: 19200,
+    isStopping: false
+  };
+
+  recordingService.activeRecordings.set(guildId, mockSession);
+
+  try {
+    await recordingService.stopRecording(guildId);
+    assert.equal(directSendAttempted, true);
+    assert.equal(retrySent, true);
+  } finally {
+    recordingService.activeRecordings.delete(guildId);
+    if (existsSync(testPcmPath)) unlinkSync(testPcmPath);
+    if (existsSync(testMp3Path)) unlinkSync(testMp3Path);
+  }
+});
+
+test('recordingService stopRecording falls back to textChannel when all DM attempts fail', async () => {
+  const guildId = 'guild-fallback-text';
+  const testPcmPath = `./storage/recordings/test_fallback_${Date.now()}.pcm`;
+  const testMp3Path = `./storage/recordings/test_fallback_${Date.now()}.mp3`;
+  writeFileSync(testPcmPath, Buffer.alloc(19200));
+
+  let fallbackChannelPayload = null;
+
+  const mockSession = {
+    guildId,
+    guildName: 'Test Guild',
+    voiceChannelId: 'vc-1',
+    voiceChannelName: 'Voice',
+    ownerId: 'owner-1',
+    textChannel: {
+      name: 'general',
+      send: async (payload) => {
+        fallbackChannelPayload = payload;
+      }
+    },
+    owner: {
+      id: 'owner-1',
+      send: async () => {
+        throw new Error('Direct send blocked');
+      },
+      createDM: async () => {
+        throw new Error('Create DM failed');
+      },
+      client: {
+        appContext: {
+          settingsService: {
+            getEffectiveSettings: async () => ({ twentyFourSeven: { enabled: false } })
+          }
+        },
+        guilds: { cache: new Map() }
+      }
+    },
+    connection: { destroy: () => {} },
+    startTime: Date.now() - 5000,
+    pcmPath: testPcmPath,
+    mp3Path: testMp3Path,
+    pcmStream: { end: (cb) => cb() },
+    receiver: { speaking: { off: () => {} } },
+    speakingSubscriptions: new Map(),
+    bytesWritten: 19200,
+    isStopping: false
+  };
+
+  recordingService.activeRecordings.set(guildId, mockSession);
+
+  try {
+    await recordingService.stopRecording(guildId);
+    assert.ok(fallbackChannelPayload);
+    assert.match(fallbackChannelPayload.content, /Could not deliver to your Direct Messages/);
+    assert.equal(fallbackChannelPayload.files.length, 1);
+  } finally {
+    recordingService.activeRecordings.delete(guildId);
+    if (existsSync(testPcmPath)) unlinkSync(testPcmPath);
+    if (existsSync(testMp3Path)) unlinkSync(testMp3Path);
+  }
+});

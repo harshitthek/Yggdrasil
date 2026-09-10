@@ -43,7 +43,16 @@ export function isOwner(userId, appContext, client) {
   return false;
 }
 
-export async function executeRecord({ action, durationStr, voiceChannel, user, textChannel, appContext, respond }) {
+export async function executeRecord({
+  action,
+  durationStr,
+  voiceChannel,
+  user,
+  textChannel,
+  guild: inputGuild,
+  appContext,
+  respond
+}) {
   const client = appContext?.client || voiceChannel?.client || textChannel?.client;
   if (!isOwner(user.id, appContext, client)) {
     return respond({
@@ -52,7 +61,7 @@ export async function executeRecord({ action, durationStr, voiceChannel, user, t
     });
   }
 
-  const guild = voiceChannel?.guild || textChannel?.guild;
+  const guild = inputGuild || voiceChannel?.guild || textChannel?.guild;
   if (!guild) {
     return respond({
       embeds: [buildErrorEmbed('Guild Required', 'This command can only be used in a Discord server.')],
@@ -198,6 +207,7 @@ export async function execute(interaction) {
     `[RecordCommand] In execute for user ${interaction.user?.tag || interaction.user?.id} (${interaction.user?.id}), sub: ${interaction.options?.getSubcommand?.(false) || 'default'}`
   );
 
+  let interactionExpired = false;
   // Defer immediately to ensure the 3-second SLA is satisfied
   if (!interaction.deferred && !interaction.replied) {
     try {
@@ -206,11 +216,10 @@ export async function execute(interaction) {
       });
       logger.info(`[RecordCommand] deferReply success`);
     } catch (err) {
-      logger.error(`[RecordCommand] deferReply error:`, err);
+      logger.warn(`[RecordCommand] deferReply notice (${err.code}):`, err.message);
       if (err.code === 10062) {
-        return;
-      }
-      if (err.code === 40060) {
+        interactionExpired = true;
+      } else if (err.code === 40060) {
         logger.info(`[RecordCommand] Interaction already acknowledged (${err.code}), continuing.`);
       } else {
         throw err;
@@ -229,7 +238,7 @@ export async function execute(interaction) {
     member = await interaction.guild.members.fetch(interaction.user.id).catch(() => member);
   }
   let voiceChannel = member?.voice?.channel;
-  if (!voiceChannel && member?.voice?.channelId) {
+  if (!voiceChannel && member?.voice?.channelId && interaction.guild) {
     voiceChannel =
       interaction.guild.channels.cache.get(member.voice.channelId) ||
       (await interaction.guild.channels.fetch(member.voice.channelId).catch(() => null));
@@ -244,13 +253,31 @@ export async function execute(interaction) {
     voiceChannel,
     user: interaction.user,
     textChannel,
+    guild: interaction.guild,
     appContext,
     respond: async (payload) => {
       logger.info(`[RecordCommand] respond payload: ${JSON.stringify(payload)}`);
-      if (interaction.replied || interaction.deferred) {
-        await interaction.editReply(payload);
-      } else {
-        await interaction.reply(payload);
+      if (interactionExpired) {
+        try {
+          await textChannel?.send(payload);
+        } catch {}
+        return;
+      }
+      try {
+        if (interaction.replied || interaction.deferred) {
+          await interaction.editReply(payload);
+        } else {
+          await interaction.reply(payload);
+        }
+      } catch (err) {
+        logger.warn(`[RecordCommand] reply/editReply notice (${err?.code}):`, err?.message);
+        if (err?.code === 10062) {
+          try {
+            await textChannel?.send(payload);
+          } catch {}
+        } else {
+          throw err;
+        }
       }
       logger.info(`[RecordCommand] respond finished`);
     }
@@ -289,6 +316,7 @@ export async function executeMessage(context) {
     voiceChannel,
     user: context.user,
     textChannel,
+    guild: context.guild,
     appContext: context.appContext,
     respond: async (payload) => {
       await context.respond(payload);

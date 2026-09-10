@@ -13,6 +13,8 @@
     "register:commands": "node scripts/registerCommands.js",
     "postinstall": "node scripts/postinstall.js",
     "test": "node --test",
+    "test:smoke": "node scripts/smokeRunner.js",
+    "test:mutation": "node scripts/mutationRunner.js",
     "migrate": "node scripts/migrate.js",
     "format": "prettier --write \"src/**/*.{js,json,md}\" \"test/**/*.{js,json,md}\" \"scripts/**/*.{js,json,md}\" \"*.js\" \"*.json\" \"*.md\"",
     "format:check": "prettier --check \"src/**/*.{js,json,md}\" \"test/**/*.{js,json,md}\" \"scripts/**/*.{js,json,md}\" \"*.js\" \"*.json\" \"*.md\"",
