@@ -210,7 +210,11 @@ export async function execute(interaction) {
       if (err.code === 10062) {
         return;
       }
-      throw err;
+      if (err.code === 40060) {
+        logger.info(`[RecordCommand] Interaction already acknowledged (${err.code}), continuing.`);
+      } else {
+        throw err;
+      }
     }
   }
 
@@ -267,7 +271,16 @@ export async function executeMessage(context) {
     action = 'start';
   }
 
-  const voiceChannel = context.member?.voice?.channel;
+  let member = context.member;
+  if (!member?.voice?.channelId && context.guild && context.user?.id) {
+    member = await context.guild.members.fetch(context.user.id).catch(() => member);
+  }
+  let voiceChannel = member?.voice?.channel;
+  if (!voiceChannel && member?.voice?.channelId && context.guild) {
+    voiceChannel =
+      context.guild.channels.cache.get(member.voice.channelId) ||
+      (await context.guild.channels.fetch(member.voice.channelId).catch(() => null));
+  }
   const textChannel = context.message?.channel;
 
   await executeRecord({

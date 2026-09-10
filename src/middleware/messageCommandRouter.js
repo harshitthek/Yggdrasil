@@ -78,7 +78,16 @@ async function canUseNoPrefix(message) {
 function isBotOwner(message) {
   const appContext = getAppContext(message) ?? {};
   const botOwnerId = appContext.runtimeConfig?.botOwnerId;
-  return Boolean(botOwnerId && message.author.id === botOwnerId);
+  const userId = message.author.id;
+  const clientOwner = message.client?.application?.owner;
+
+  return Boolean(
+    userId &&
+    ((botOwnerId && userId === botOwnerId) ||
+      clientOwner?.id === userId ||
+      clientOwner?.ownerUserId === userId ||
+      Boolean(clientOwner?.members?.has?.(userId)))
+  );
 }
 
 export async function handleMessageCommand(message, { log = logger } = {}) {
