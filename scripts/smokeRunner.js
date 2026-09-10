@@ -151,26 +151,27 @@ async function main() {
   await runSection('6. Live Oracle Cloud Host Health', async () => {
     const sshKey = 'C:\\Users\\user\\Desktop\\dwsktop\\ygg2\\ssh-key-2026-08-22.key';
     const vmHost = 'opc@130.210.0.193';
+    const isRemote = existsSync(sshKey);
 
     try {
-      const pm2Output = execSync(
-        `ssh -i "${sshKey}" -o StrictHostKeyChecking=no -o ConnectTimeout=5 ${vmHost} "pm2 jlist"`,
-        { encoding: 'utf8' }
-      );
+      const pm2Cmd = isRemote
+        ? `ssh -i "${sshKey}" -o StrictHostKeyChecking=no -o ConnectTimeout=5 ${vmHost} "pm2 jlist"`
+        : 'pm2 jlist';
+      const pm2Output = execSync(pm2Cmd, { encoding: 'utf8' });
       const processes = JSON.parse(pm2Output);
       const botProc = processes.find((p) => p.name === 'world-tree');
       assert.ok(botProc, 'world-tree process must exist in PM2');
       assert.equal(botProc.pm2_env.status, 'online', 'world-tree process status must be "online"');
-      pass('PM2 process online on VM', `PID: ${botProc.pid}, restarts: ${botProc.pm2_env.restart_time}`);
+      pass('PM2 process online', `PID: ${botProc.pid}, restarts: ${botProc.pm2_env.restart_time}`);
 
-      const opsHealth = execSync(
-        `ssh -i "${sshKey}" -o StrictHostKeyChecking=no -o ConnectTimeout=5 ${vmHost} "cd /home/opc/apps/Yggdrasil-Bot && bash ops/health.sh"`,
-        { encoding: 'utf8' }
-      );
+      const healthCmd = isRemote
+        ? `ssh -i "${sshKey}" -o StrictHostKeyChecking=no -o ConnectTimeout=5 ${vmHost} "cd /home/opc/apps/Yggdrasil-Bot && bash ops/health.sh"`
+        : 'bash ops/health.sh';
+      const opsHealth = execSync(healthCmd, { encoding: 'utf8' });
       assert.ok(opsHealth.includes('Overall Health: PASS'), 'ops/health.sh must pass');
-      pass('Ops health checks passed on VM', 'ops/health.sh: PASS');
+      pass('Ops health checks passed', 'ops/health.sh: PASS');
     } catch (err) {
-      fail('Failed to query remote VM host', err);
+      fail('Failed to query host health', err);
     }
   });
 
